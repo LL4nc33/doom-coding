@@ -49,6 +49,11 @@ FORCE=false
 ENV_FILE=""
 USE_TAILSCALE=true
 
+# Unattended installation values
+TAILSCALE_KEY=""
+CODE_PASSWORD=""
+ANTHROPIC_KEY=""
+
 # Detected system info
 OS_ID=""
 OS_VERSION=""
@@ -132,6 +137,9 @@ OPTIONS:
     --skip-hardening    Skip SSH hardening
     --skip-secrets      Skip SOPS/age setup
     --env-file=FILE     Use specific environment file
+    --tailscale-key=KEY Tailscale auth key for unattended setup
+    --code-password=PWD code-server password for unattended setup
+    --anthropic-key=KEY Anthropic API key for Claude Code
     --dry-run           Show what would be done without executing
     --force             Force reinstallation of all components
     --verbose           Enable verbose output
@@ -143,6 +151,10 @@ EXAMPLES:
     $0                              Interactive installation
     $0 --unattended                 Fully automated installation
     $0 --skip-tailscale             LXC without TUN device
+    $0 --unattended \\
+      --tailscale-key="tskey-auth-xxx" \\
+      --code-password="secure-password" \\
+      --anthropic-key="sk-ant-xxx"      Fully automated with credentials
     $0 --skip-docker --skip-terminal  Minimal installation
     $0 --env-file=production.env    Use custom environment file
 
@@ -584,8 +596,31 @@ setup_environment() {
     # Create secrets directory with placeholder
     mkdir -p secrets
     if [[ ! -f secrets/anthropic_api_key.txt ]]; then
-        echo "your-api-key-here" > secrets/anthropic_api_key.txt
-        log_warning "Please update secrets/anthropic_api_key.txt with your actual API key"
+        if [[ -n "$ANTHROPIC_KEY" ]]; then
+            echo "$ANTHROPIC_KEY" > secrets/anthropic_api_key.txt
+            log_info "Anthropic API key configured from CLI parameter"
+        else
+            echo "your-api-key-here" > secrets/anthropic_api_key.txt
+            log_warning "Please update secrets/anthropic_api_key.txt with your actual API key"
+        fi
+    fi
+
+    # Update .env with CLI parameters if provided
+    if [[ "$UNATTENDED" == "true" ]]; then
+        if [[ -n "$TAILSCALE_KEY" ]]; then
+            sed -i "s/^TS_AUTHKEY=.*/TS_AUTHKEY=${TAILSCALE_KEY}/" .env
+            log_info "Tailscale key configured"
+        fi
+
+        if [[ -n "$CODE_PASSWORD" ]]; then
+            sed -i "s/^CODE_SERVER_PASSWORD=.*/CODE_SERVER_PASSWORD=${CODE_PASSWORD}/" .env
+            log_info "code-server password configured"
+        fi
+
+        if [[ -n "$ANTHROPIC_KEY" ]]; then
+            sed -i "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${ANTHROPIC_KEY}|" .env
+            log_info "Anthropic API key configured in .env"
+        fi
     fi
 
     log_success "Environment configured"
@@ -665,6 +700,18 @@ parse_arguments() {
                 ;;
             --env-file=*)
                 ENV_FILE="${1#*=}"
+                shift
+                ;;
+            --tailscale-key=*)
+                TAILSCALE_KEY="${1#*=}"
+                shift
+                ;;
+            --code-password=*)
+                CODE_PASSWORD="${1#*=}"
+                shift
+                ;;
+            --anthropic-key=*)
+                ANTHROPIC_KEY="${1#*=}"
                 shift
                 ;;
             --dry-run)
