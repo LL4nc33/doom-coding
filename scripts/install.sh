@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Doom Coding - One-Click Installer
 # Entry point for complete environment setup
-set -euo pipefail
+set -eo pipefail
 
 # ===========================================
 # BRAND COLORS (ANSI 256)
@@ -17,10 +17,24 @@ readonly NC='\033[0m'
 # ===========================================
 # CONFIGURATION
 # ===========================================
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# Handle curl | bash case where BASH_SOURCE is empty
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    readonly PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+else
+    # Running via curl | bash - clone to temp directory
+    readonly SCRIPT_DIR="/tmp/doom-coding-install"
+    readonly PROJECT_DIR="/tmp/doom-coding"
+    if [[ ! -d "$PROJECT_DIR" ]]; then
+        echo -e "${BLUE}ℹ${NC}  Cloning repository for installation..."
+        git clone --depth 1 https://github.com/LL4nc33/doom-coding.git "$PROJECT_DIR" 2>/dev/null || {
+            echo -e "${RED}❌${NC} Failed to clone repository"
+            exit 1
+        }
+    fi
+fi
 readonly LOG_FILE="${LOG_FILE:-/var/log/doom-coding-install.log}"
-readonly VERSION="1.0.0"
+readonly INSTALLER_VERSION="1.0.0"
 
 # Default options
 UNATTENDED=false
@@ -97,7 +111,7 @@ print_banner() {
                                                          /____/
 EOF
     echo -e "${NC}"
-    echo -e "${BROWN}Remote Development Environment v${VERSION}${NC}"
+    echo -e "${BROWN}Remote Development Environment v${INSTALLER_VERSION}${NC}"
     echo ""
 }
 
@@ -131,7 +145,7 @@ EOF
 }
 
 print_version() {
-    echo "Doom Coding Installer v${VERSION}"
+    echo "Doom Coding Installer v${INSTALLER_VERSION}"
 }
 
 confirm() {
@@ -198,10 +212,9 @@ detect_os() {
     log_step "Detecting operating system..."
 
     if [[ -f /etc/os-release ]]; then
-        # shellcheck source=/dev/null
-        source /etc/os-release
-        OS_ID="${ID}"
-        OS_VERSION="${VERSION_ID:-unknown}"
+        # Read os-release without sourcing (avoids variable conflicts)
+        OS_ID="$(grep -E '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')"
+        OS_VERSION="$(grep -E '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"' || echo 'unknown')"
     elif [[ -f /etc/debian_version ]]; then
         OS_ID="debian"
         OS_VERSION="$(cat /etc/debian_version)"
