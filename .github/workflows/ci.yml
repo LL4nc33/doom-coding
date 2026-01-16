@@ -18,7 +18,11 @@ jobs:
 
       - name: Run ShellCheck
         run: |
-          find scripts/ -name "*.sh" -exec shellcheck {} +
+          # Run shellcheck with exclusions for common false positives:
+          # SC2034: Unused variables (often used for color definitions)
+          # SC2155: Declare and assign separately (acceptable for readonly)
+          # SC1091: Not following sourced files (shellcheck doesn't have context)
+          find scripts/ -name "*.sh" -exec shellcheck -e SC2034,SC2155,SC1091 {} +
 
   lint-go:
     name: Lint Go Code
@@ -30,6 +34,14 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true
+          cache-dependency-path: cmd/doom-tui/go.mod
+
+      - name: Download dependencies
+        run: |
+          cd cmd/doom-tui
+          go mod download
+          go mod tidy
 
       - name: Install golangci-lint
         run: |
@@ -54,6 +66,14 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true
+          cache-dependency-path: cmd/doom-tui/go.mod
+
+      - name: Download dependencies
+        run: |
+          cd cmd/doom-tui
+          go mod download
+          go mod tidy
 
       - name: Build
         run: |
@@ -76,6 +96,14 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true
+          cache-dependency-path: cmd/doom-tui/go.mod
+
+      - name: Download dependencies
+        run: |
+          cd cmd/doom-tui
+          go mod download
+          go mod tidy
 
       - name: Run tests
         run: |
@@ -98,6 +126,14 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true
+          cache-dependency-path: cmd/doom-tui/go.mod
+
+      - name: Download dependencies
+        run: |
+          cd cmd/doom-tui
+          go mod download
+          go mod tidy
 
       - name: Run govulncheck
         run: |

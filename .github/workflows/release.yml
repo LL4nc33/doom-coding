@@ -18,9 +18,18 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true
+          cache-dependency-path: cmd/doom-tui/go.mod
+
+      - name: Download dependencies
+        run: |
+          cd cmd/doom-tui
+          go mod download
+          go mod tidy
 
       - name: Build all platforms
         run: |
+          mkdir -p bin
           cd cmd/doom-tui
           for os in linux darwin; do
             for arch in amd64 arm64; do
