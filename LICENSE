@@ -1,0 +1,34 @@
+# Doom Coding License
+
+This project is dual-licensed under your choice of:
+
+## Option 1: GNU Affero General Public License v3.0 (AGPL-3.0)
+
+Full text available at:
+https://www.gnu.org/licenses/agpl-3.0.html
+
+SPDX License Identifier: AGPL-3.0-or-later
+
+## Option 2: Apache License 2.0
+
+Full text available at:
+https://www.apache.org/licenses/LICENSE-2.0
+
+SPDX License Identifier: Apache-2.0
+
+---
+
+## Summary
+
+**AGPL-3.0**: Strong copyleft license that requires source code disclosure
+for network use. Best for ensuring all derivatives remain open source.
+
+**Apache 2.0**: Permissive license that allows commercial use and
+modification without requiring source code disclosure.
+
+---
+
+Choose the license that best fits your use case by specifying it in your
+derivative work. If no license is specified, AGPL-3.0 applies by default.
+
+Copyright (c) 2025 Doom Coding Contributors

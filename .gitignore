@@ -1,0 +1,105 @@
+# Doom Coding .gitignore
+
+# ===========================================
+# Environment and Secrets
+# ===========================================
+
+# Environment files (contains secrets)
+.env
+.env.local
+.env.*.local
+
+# Secrets directory (except encrypted files)
+secrets/
+!secrets/.gitkeep
+
+# Age encryption keys
+*.age
+keys.txt
+
+# ===========================================
+# Docker
+# ===========================================
+
+# Docker volumes data
+volumes/
+
+# Docker Compose overrides
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ===========================================
+# IDE and Editor
+# ===========================================
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+*~
+
+# ===========================================
+# Operating System
+# ===========================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ===========================================
+# Logs
+# ===========================================
+
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===========================================
+# Workspace
+# ===========================================
+
+# Workspace directory (user projects)
+workspace/
+!workspace/.gitkeep
+
+# ===========================================
+# Temporary Files
+# ===========================================
+
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# ===========================================
+# Build Outputs
+# ===========================================
+
+dist/
+build/
+out/
+*.egg-info/
+__pycache__/
+*.pyc
+node_modules/

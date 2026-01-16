@@ -1,0 +1,23 @@
+# SOPS Configuration for Doom Coding
+# Uses age encryption for secrets management
+
+creation_rules:
+  # Encrypt all YAML files in secrets directory
+  - path_regex: secrets/.*\.yaml$
+    age: >-
+      age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    # Replace with your actual age public key
+    # Generate with: age-keygen -o keys.txt
+
+  # Encrypt environment files
+  - path_regex: \.env\.encrypted$
+    age: >-
+      age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+  # Encrypt JSON secrets
+  - path_regex: secrets/.*\.json$
+    age: >-
+      age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Key file location (set via SOPS_AGE_KEY_FILE environment variable)
+# Default: ~/.config/sops/age/keys.txt

@@ -1,0 +1,110 @@
+# Doom Coding Docker Compose Stack
+# Tailscale Sidecar Pattern with code-server and Claude Code
+
+services:
+  # Tailscale Sidecar - All other services use this for networking
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: doom-tailscale
+    hostname: doom-coding
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SOCKET=/var/run/tailscale/tailscaled.sock
+      - TS_USERSPACE=false
+      - TS_ACCEPT_DNS=${TS_ACCEPT_DNS:-false}
+      - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:---advertise-tags=tag:doom-coding}
+    healthcheck:
+      test: ["CMD", "tailscale", "status", "--json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "com.doom-coding.service=tailscale"
+      - "com.doom-coding.color=#2E521D"
+
+  # code-server - VS Code in the browser
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: doom-code-server
+    network_mode: service:tailscale
+    restart: unless-stopped
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Berlin}
+      - PASSWORD=${CODE_SERVER_PASSWORD}
+      - SUDO_PASSWORD=${SUDO_PASSWORD}
+      - DEFAULT_WORKSPACE=/workspace
+    volumes:
+      - code-server-config:/config
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - ./config/zsh/.zshrc:/config/.zshrc:ro
+      - ./config/tmux/tmux.conf:/config/.tmux.conf:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "com.doom-coding.service=code-server"
+      - "com.doom-coding.color=#7C5E46"
+
+  # Claude Code Container - Native installation
+  claude:
+    build:
+      context: .
+      dockerfile: Dockerfile.claude
+      args:
+        - TARGETARCH=${TARGETARCH:-amd64}
+    container_name: doom-claude
+    network_mode: service:tailscale
+    restart: unless-stopped
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Berlin}
+    secrets:
+      - anthropic_api_key
+    volumes:
+      - claude-config:/home/claude/.claude
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - ./config/zsh/.zshrc:/home/claude/.zshrc:ro
+      - ./config/tmux/tmux.conf:/home/claude/.tmux.conf:ro
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    labels:
+      - "com.doom-coding.service=claude"
+      - "com.doom-coding.color=#A47D5B"
+
+secrets:
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key.txt
+
+volumes:
+  tailscale-state:
+    name: doom-tailscale-state
+  code-server-config:
+    name: doom-code-server-config
+  claude-config:
+    name: doom-claude-config
+
+networks:
+  default:
+    name: doom-coding-network

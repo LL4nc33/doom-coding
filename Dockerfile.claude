@@ -1,0 +1,97 @@
+# Doom Coding - Claude Code Container
+# Multi-architecture support (amd64/arm64)
+# Uses NATIVE installation (NOT npm!)
+
+FROM debian:bookworm-slim
+
+ARG TARGETARCH=amd64
+ARG CLAUDE_USER=claude
+ARG CLAUDE_UID=1000
+ARG CLAUDE_GID=1000
+
+LABEL maintainer="Doom Coding"
+LABEL description="Claude Code with native installation"
+LABEL com.doom-coding.color="#2E521D"
+
+# Install base dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    gnupg \
+    jq \
+    less \
+    locales \
+    openssh-client \
+    ripgrep \
+    sudo \
+    tmux \
+    unzip \
+    vim \
+    wget \
+    zsh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Setup locale
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+
+# Create user
+RUN groupadd -g ${CLAUDE_GID} ${CLAUDE_USER} \
+    && useradd -m -u ${CLAUDE_UID} -g ${CLAUDE_GID} -s /bin/zsh ${CLAUDE_USER} \
+    && echo "${CLAUDE_USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/${CLAUDE_USER}
+
+# Switch to user for Claude Code installation
+USER ${CLAUDE_USER}
+WORKDIR /home/${CLAUDE_USER}
+
+# Install Claude Code using NATIVE installer (NOT npm!)
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && echo 'export PATH="$HOME/.claude/bin:$PATH"' >> ~/.zshrc \
+    && echo 'export PATH="$HOME/.claude/bin:$PATH"' >> ~/.bashrc
+
+# Install Oh My Zsh
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+
+# Install zsh plugins
+RUN git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions \
+    && git clone https://github.com/zsh-users/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+
+# Install Tmux Plugin Manager
+RUN git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+
+# Setup directories
+RUN mkdir -p /home/${CLAUDE_USER}/.claude /home/${CLAUDE_USER}/workspace
+
+# Environment
+ENV PATH="/home/${CLAUDE_USER}/.claude/bin:${PATH}"
+ENV ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_api_key
+
+WORKDIR /workspace
+
+# Entrypoint script
+COPY --chown=${CLAUDE_USER}:${CLAUDE_USER} <<'EOF' /usr/local/bin/entrypoint.sh
+#!/bin/bash
+set -e
+
+# Load API key from Docker secret if available
+if [[ -f /run/secrets/anthropic_api_key ]]; then
+    export ANTHROPIC_API_KEY=$(cat /run/secrets/anthropic_api_key)
+fi
+
+# Execute command or start shell
+if [[ $# -eq 0 ]]; then
+    exec /bin/zsh
+else
+    exec "$@"
+fi
+EOF
+
+USER root
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER ${CLAUDE_USER}
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/bin/zsh"]
