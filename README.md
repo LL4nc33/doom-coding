@@ -265,11 +265,30 @@ Choose your license:
 
 ## 🙏 Acknowledgments
 
-Built with these excellent open-source projects:
+**Inspired by:**
+- [rberg27/doom-coding](https://github.com/rberg27/doom-coding) - Original concept and inspiration
+
+**Built with these excellent open-source projects:**
 - [Tailscale](https://tailscale.com) - Secure networking
 - [code-server](https://github.com/coder/code-server) - VS Code in the browser
 - [Claude Code](https://claude.ai/claude-code) - AI development assistance
 - [LinuxServer.io](https://www.linuxserver.io/) - Quality container images
+
+## 🤖 AI Development
+
+This project was developed entirely by AI agents using a multi-agent orchestration approach.
+
+**Development Stack:**
+- **Claude Opus 4.5** - Strategic orchestration, architecture decisions, and project coordination
+- **Claude Sonnet 4** - Implementation, code generation, testing, and comprehensive documentation
+
+**Methodology:**
+- Multi-agent workflow with specialized roles (architect, researcher, security, devops, implementer)
+- Iterative development with continuous refinement and validation
+- Comprehensive testing across multiple platforms and deployment scenarios
+- Human oversight for direction, requirements, and final approval
+
+This represents a demonstration of AI-assisted software development at scale, where AI agents handled all aspects of design, implementation, security auditing, testing, and documentation while maintaining professional software engineering standards and best practices.
 
 ---
 
