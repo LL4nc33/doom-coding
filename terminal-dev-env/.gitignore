@@ -1,0 +1,38 @@
+# Terminal Development Environment - Git Ignore
+
+# Runtime files
+logs/
+*.log
+
+# SSL certificates (sensitive - generate on installation)
+ssl/
+
+# Authentication files (sensitive)
+config/nginx/.htpasswd
+config/nginx/.htpasswd.plain
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+tmp/
+
+# Node modules (if any)
+node_modules/
+
+# Build artifacts
+build/
+dist/
+
+# Cache directories
+.cache/

@@ -1,0 +1,53 @@
+v0.0.2
+
+# Terminal Development Environment
+# Version History
+
+## v0.0.2 (2025-01-16)
+### Features
+- Vollstaendige Installation fuer Linux (Debian/Ubuntu, RHEL/Fedora, Arch)
+- WSL2-Unterstuetzung mit Windows Port-Forwarding-Skripten
+- Mobile-optimierte tmux-Konfiguration
+  - Prefix: Ctrl+a
+  - Maus-Unterstuetzung
+  - Session-Persistenz mit tmux-resurrect/continuum
+  - Alt+Pfeiltaste fuer Pane-Wechsel ohne Prefix
+- Mobile-optimierte Neovim-Konfiguration (Lua)
+  - Lazy.nvim Plugin-Manager
+  - LSP mit Mason (Lua, Python, TypeScript, Rust)
+  - Telescope fuer Datei-/Textsuche
+  - Tokyo Night Farbschema
+  - Escape-Alternative: jk/kj
+- Zsh mit Oh-My-Zsh
+  - Vorinstallierte Plugins (git, docker, fzf, z, etc.)
+  - Moderne CLI-Tools-Aliase (exa, bat, fd)
+- SSL/TLS mit selbst-signiertem Zertifikat
+- Basic Auth via nginx
+- UFW/firewalld Firewall-Konfiguration
+- Health Check Skript
+- Umfassende Dokumentation (DE)
+
+### Komponenten
+- ttyd 1.7.4+
+- nginx (Reverse Proxy)
+- tmux 3.0+ mit TPM
+- neovim 0.8+ mit lazy.nvim
+- zsh 5.8+ mit Oh-My-Zsh
+
+### Sicherheit
+- HTTPS-only (HTTP redirected)
+- ttyd bindet nur auf localhost
+- Rate Limiting in nginx
+- Session-Timeouts: 7 Tage
+
+## v0.0.1 (Konzept)
+- Initiales Design und Architektur-Planung
+- Anforderungsanalyse fuer Mobile-Nutzung
+
+# Geplante Features (Roadmap)
+- [ ] Let's Encrypt Integration
+- [ ] Multi-User-Support
+- [ ] Container-basierte Installation (Docker)
+- [ ] Backup/Restore-Funktionalitaet
+- [ ] Prometheus-Metriken
+- [ ] Fail2ban-Integration
