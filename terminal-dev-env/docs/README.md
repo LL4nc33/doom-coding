@@ -50,21 +50,50 @@ Smartphone Browser (HTTPS)
 
 ## Installation
 
+### Verfuegbare Setup-Skripte
+
+| Skript | Verwendung |
+|--------|------------|
+| `install.sh` | **Haupt-Installer** - Vollstaendige Installation mit CLI-Optionen |
+| `setup-linux.sh` | Linux-spezifisches Setup (wird von install.sh aufgerufen) |
+| `setup-windows.sh` | WSL2-spezifisches Setup inkl. Windows Port-Forwarding |
+| `health-check.sh` | System-Diagnose und Statusueberpruefung |
+
 ### Option A: Linux (Bare-Metal / VM)
 
+#### Schnellinstallation (empfohlen)
+
 ```bash
-# 1. Repository klonen oder Dateien kopieren
-git clone <repository-url> /tmp/terminal-dev-env
-sudo cp -r /tmp/terminal-dev-env /opt/terminal-dev-env
+# 1. Repository klonen
+git clone https://github.com/LL4nc33/doom-coding.git /tmp/doom-coding
+sudo cp -r /tmp/doom-coding/terminal-dev-env /opt/terminal-dev-env
 
-# 2. Installer ausfuehren
+# 2. Haupt-Installer ausfuehren
 sudo bash /opt/terminal-dev-env/bin/install.sh
-
-# 3. (Optional) Benutzerdefinierte Credentials setzen
-sudo bash /opt/terminal-dev-env/bin/install.sh -u meinuser -p meinpasswort
 ```
 
-#### Installer-Optionen
+#### Installation mit benutzerdefinierten Optionen
+
+```bash
+# Mit eigenem Benutzernamen und Passwort
+sudo bash /opt/terminal-dev-env/bin/install.sh -u meinuser -p meinpasswort
+
+# Mit eigener Domain fuer SSL-Zertifikat
+sudo bash /opt/terminal-dev-env/bin/install.sh -d meine-domain.local
+
+# Ohne Firewall-Konfiguration (falls bereits konfiguriert)
+sudo bash /opt/terminal-dev-env/bin/install.sh --skip-firewall
+```
+
+#### Nur Linux-Setup (ohne CLI-Optionen)
+
+Falls nur das Linux-spezifische Setup benoetigt wird:
+
+```bash
+sudo bash /opt/terminal-dev-env/bin/setup-linux.sh
+```
+
+#### Installer-Optionen (install.sh)
 
 | Option | Beschreibung |
 |--------|--------------|
@@ -78,29 +107,47 @@ sudo bash /opt/terminal-dev-env/bin/install.sh -u meinuser -p meinpasswort
 
 ### Option B: WSL2 (Windows)
 
-```bash
-# 1. In WSL2-Terminal
-git clone <repository-url> /tmp/terminal-dev-env
-sudo cp -r /tmp/terminal-dev-env /opt/terminal-dev-env
+#### Schritt 1: Installation in WSL2
 
-# 2. WSL2-Setup ausfuehren
+```bash
+# In WSL2-Terminal (Ubuntu/Debian)
+git clone https://github.com/LL4nc33/doom-coding.git /tmp/doom-coding
+sudo cp -r /tmp/doom-coding/terminal-dev-env /opt/terminal-dev-env
+
+# WSL2-Setup ausfuehren (konfiguriert auch Windows-Skripte)
 sudo bash /opt/terminal-dev-env/bin/setup-windows.sh
 ```
+
+#### Schritt 2: Windows Port-Forwarding einrichten
 
 Nach der Installation in WSL2 muss Port-Forwarding auf Windows konfiguriert werden:
 
 ```powershell
-# 3. In Windows PowerShell (als Administrator)
+# In Windows PowerShell (als Administrator!)
 C:\terminal-dev-env\setup-portforward.bat
 ```
 
-**Wichtig**: Nach dem ersten Setup muss WSL2 neu gestartet werden:
+Das Skript:
+- Ermittelt automatisch die WSL2-IP-Adresse
+- Richtet Port-Forwarding fuer Port 80 und 443 ein
+- Konfiguriert Windows Firewall-Regeln
+
+#### Schritt 3: WSL2 neu starten (nur beim ersten Setup)
 
 ```powershell
 # In PowerShell
 wsl --shutdown
 wsl
 ```
+
+#### Automatisches Port-Forwarding bei Windows-Start (optional)
+
+```powershell
+# Als Administrator ausfuehren
+C:\terminal-dev-env\create-scheduled-task.ps1
+```
+
+Dies erstellt eine geplante Aufgabe, die das Port-Forwarding automatisch bei jedem Windows-Start aktualisiert (wichtig, da sich die WSL2-IP aendern kann).
 
 ## Zugriff
 
