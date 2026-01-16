@@ -61,6 +61,19 @@ ARCH=""
 PKG_MANAGER=""
 
 # ===========================================
+# TRAP HANDLER FOR CLEANUP
+# ===========================================
+cleanup_on_error() {
+    local exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+        log_warning "Installation interrupted or failed (exit code: $exit_code)"
+        log_warning "Check log file for details: $LOG_FILE"
+        # Add any cleanup needed here
+    fi
+}
+trap cleanup_on_error ERR INT TERM
+
+# ===========================================
 # LOGGING FUNCTIONS
 # ===========================================
 setup_logging() {
@@ -102,6 +115,62 @@ log_error() {
 log_step() {
     log "STEP" "$*"
     echo -e "${BROWN}⏳${NC} $*"
+}
+
+# ===========================================
+# SECURE DOWNLOAD FUNCTIONS
+# ===========================================
+
+# Known checksums for external scripts (update as needed)
+# These should be verified from official sources before deployment
+# To get checksum: curl -fsSL <URL> | sha256sum
+declare -A KNOWN_CHECKSUMS=(
+    # Tailscale install script - empty means warn but allow (script changes frequently)
+    # Verify at: https://tailscale.com/install.sh
+    ["tailscale"]=""
+)
+
+# Secure download function that verifies checksums before execution
+# Usage: verified_download_and_run <url> [expected_sha256] [script_name]
+verified_download_and_run() {
+    local url="$1"
+    local expected_sha256="${2:-}"
+    local script_name="${3:-install.sh}"
+
+    local temp_file
+    temp_file=$(mktemp)
+    # Ensure cleanup on function exit
+    trap 'rm -f "$temp_file"' RETURN
+
+    log_step "Downloading $script_name from $url..."
+
+    if ! curl -fsSL "$url" -o "$temp_file"; then
+        log_error "Failed to download from $url"
+        return 1
+    fi
+
+    # Verify checksum if provided
+    if [[ -n "$expected_sha256" ]]; then
+        local actual_sha256
+        actual_sha256=$(sha256sum "$temp_file" | cut -d' ' -f1)
+        if [[ "$actual_sha256" != "$expected_sha256" ]]; then
+            log_error "Checksum verification failed for $script_name"
+            log_error "Expected: $expected_sha256"
+            log_error "Got: $actual_sha256"
+            return 1
+        fi
+        log_success "Checksum verified for $script_name"
+    else
+        log_warning "No checksum provided for $script_name - skipping verification"
+        log_warning "Downloaded script hash: $(sha256sum "$temp_file" | cut -d' ' -f1)"
+    fi
+
+    # Make executable and run
+    chmod +x "$temp_file"
+    bash "$temp_file"
+    local exit_code=$?
+
+    return $exit_code
 }
 
 # ===========================================
@@ -191,8 +260,15 @@ prompt_value() {
     local var_name="$3"
     local secret="${4:-false}"
 
+    # Validate variable name to prevent injection (alphanumeric and underscore only)
+    if [[ ! "$var_name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        log_error "Invalid variable name: $var_name"
+        return 1
+    fi
+
     if [[ "$UNATTENDED" == "true" ]]; then
-        eval "$var_name=\"$default\""
+        # Use declare -g for safer global variable assignment
+        declare -g "$var_name=$default"
         return
     fi
 
@@ -204,7 +280,8 @@ prompt_value() {
         read -rp "$prompt [$default]: " value
     fi
 
-    eval "$var_name=\"${value:-$default}\""
+    # Use declare -g for safer global variable assignment
+    declare -g "$var_name=${value:-$default}"
 }
 
 check_root() {
@@ -220,6 +297,90 @@ check_internet() {
         return 1
     fi
     log_success "Internet connection available"
+}
+
+# ===========================================
+# PRE-FLIGHT CHECKS
+# ===========================================
+preflight_check() {
+    log_step "Running pre-flight checks..."
+    local failed=0
+
+    # Check sudo/root access
+    if [[ $EUID -ne 0 ]] && ! sudo -n true 2>/dev/null; then
+        if ! sudo -v; then
+            log_error "Sudo access required"
+            failed=1
+        fi
+    fi
+    log_info "Sudo access: OK"
+
+    # Check internet connectivity
+    if ! curl -sf --max-time 10 https://google.com &>/dev/null; then
+        log_error "Internet connectivity check failed"
+        failed=1
+    else
+        log_info "Internet connectivity: OK"
+    fi
+
+    # Check disk space (need at least 10GB)
+    local available_gb
+    available_gb=$(df -BG . 2>/dev/null | awk 'NR==2 {print $4}' | tr -d 'G')
+    if [[ -n "$available_gb" ]] && [[ $available_gb -lt 10 ]]; then
+        log_error "Insufficient disk space: ${available_gb}GB available (need 10GB)"
+        failed=1
+    else
+        log_info "Disk space: ${available_gb:-unknown}GB available"
+    fi
+
+    # Check memory (recommend at least 2GB)
+    local mem_gb
+    mem_gb=$(free -g 2>/dev/null | awk '/^Mem:/{print $2}')
+    if [[ -n "$mem_gb" ]] && [[ $mem_gb -lt 2 ]]; then
+        log_warning "Low memory: ${mem_gb}GB (recommended 2GB+)"
+    else
+        log_info "Memory: ${mem_gb:-unknown}GB available"
+    fi
+
+    # Check required commands
+    for cmd in curl git; do
+        if command -v "$cmd" &>/dev/null; then
+            log_info "Required command '$cmd': found"
+        else
+            log_error "Required command '$cmd': not found"
+            failed=1
+        fi
+    done
+
+    if [[ $failed -eq 1 ]]; then
+        log_error "Pre-flight checks failed. Please fix the issues above."
+        return 1
+    fi
+
+    log_success "All pre-flight checks passed"
+    return 0
+}
+
+# ===========================================
+# INPUT VALIDATION FUNCTIONS
+# ===========================================
+validate_password() {
+    local password="$1"
+    local min_length="${2:-8}"
+
+    if [[ ${#password} -lt $min_length ]]; then
+        log_error "Password must be at least $min_length characters"
+        return 1
+    fi
+    return 0
+}
+
+validate_tailscale_key() {
+    local key="$1"
+    if [[ -n "$key" ]] && [[ ! "$key" =~ ^tskey- ]]; then
+        log_warning "Tailscale key format may be invalid (should start with 'tskey-')"
+    fi
+    return 0
 }
 
 # ===========================================
@@ -564,7 +725,13 @@ install_tailscale() {
         return 0
     fi
 
-    curl -fsSL https://tailscale.com/install.sh | sh
+    # Use verified download instead of curl|sh for security
+    # Tailscale script changes frequently, so checksum verification is optional
+    # The function will warn if no checksum is provided and display the actual hash
+    verified_download_and_run \
+        "https://tailscale.com/install.sh" \
+        "${KNOWN_CHECKSUMS[tailscale]:-}" \
+        "Tailscale installer"
 
     log_success "Tailscale installed"
 }
@@ -761,14 +928,24 @@ main() {
         log_warning "DRY RUN MODE - No changes will be made"
     fi
 
+    # Validate input parameters if provided
+    if [[ -n "$CODE_PASSWORD" ]]; then
+        validate_password "$CODE_PASSWORD" || exit 1
+    fi
+    if [[ -n "$TAILSCALE_KEY" ]]; then
+        validate_tailscale_key "$TAILSCALE_KEY"
+    fi
+
+    # Run pre-flight checks (sudo, internet, disk, memory, required commands)
+    preflight_check || exit 1
+
     # System detection
     detect_os
     detect_arch
     detect_package_manager
 
-    # Prerequisites
+    # Additional prerequisite checks
     check_root
-    check_internet
 
     # Installation steps
     install_base_packages

@@ -104,7 +104,24 @@ Bare-metal ttyd + tmux + neovim setup without Docker.
 curl -fsSL https://raw.githubusercontent.com/LL4nc33/doom-coding/main/scripts/install.sh | bash
 ```
 
-**Interactive Installation:**
+**Interactive TUI Wizard (Recommended):**
+```bash
+git clone https://github.com/LL4nc33/doom-coding.git
+cd doom-coding
+make build-tui && ./bin/doom-tui
+```
+
+The TUI provides a visual, guided installation experience with:
+- System detection and compatibility checks
+- Deployment mode selection (Tailscale/Local/Terminal-only)
+- Component selection with checkboxes
+- Configuration input with validation
+- Real-time installation progress
+- Health check verification
+
+See [TUI Documentation](docs/TUI.md) for details.
+
+**CLI Installation:**
 ```bash
 git clone https://github.com/LL4nc33/doom-coding.git
 cd doom-coding

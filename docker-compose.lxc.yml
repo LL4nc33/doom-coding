@@ -28,6 +28,18 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.doom-coding.service=code-server"
       - "com.doom-coding.color=#7C5E46"
@@ -57,6 +69,18 @@ services:
     working_dir: /workspace
     stdin_open: true
     tty: true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.doom-coding.service=claude"
       - "com.doom-coding.color=#A47D5B"
