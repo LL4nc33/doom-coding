@@ -36,9 +36,12 @@ curl -fsSL https://raw.githubusercontent.com/LL4nc33/doom-coding/main/scripts/in
 | **code-server** | Full VS Code experience accessible from anywhere |
 | **Claude Code** | AI-powered development assistance |
 | **Terminal Tools** | Pre-configured zsh, tmux, and development tools |
+| **Terminal Environment** | Lightweight ttyd-based alternative (~200MB RAM) |
 | **Secrets Management** | SOPS/age encryption for sensitive configuration |
 | **SSH Hardening** | Modern security configurations and best practices |
 | **Health Monitoring** | Automated health checks and service monitoring |
+| **LXC Support** | Run in Proxmox LXC containers without TUN device |
+| **Flexible Networking** | Choose between Tailscale VPN or local network access |
 
 ## 🏗️ Architecture
 
@@ -66,6 +69,26 @@ curl -fsSL https://raw.githubusercontent.com/LL4nc33/doom-coding/main/scripts/in
                   └─────────────────┘
 ```
 
+## 🎯 Deployment Options
+
+### Option 1: Docker + Tailscale (Standard)
+Full-featured deployment with VS Code in browser and secure Tailscale networking.
+- **Best for**: Remote access, security-focused setups
+- **Requirements**: Docker, TUN device for Tailscale
+- **Access**: Via Tailscale IP (100.x.x.x)
+
+### Option 2: Docker + Local Network (LXC)
+Docker deployment without Tailscale - access via local network IP.
+- **Best for**: LXC containers, home lab setups
+- **Requirements**: Docker only (no TUN device needed)
+- **Access**: Via local IP (192.168.x.x)
+
+### Option 3: Terminal Environment (Lightweight)
+Bare-metal ttyd + tmux + neovim setup without Docker.
+- **Best for**: Resource-constrained systems, mobile access
+- **Requirements**: systemd, ~200MB RAM
+- **Documentation**: [Terminal Dev Environment](terminal-dev-env/docs/README.md)
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -76,13 +99,30 @@ curl -fsSL https://raw.githubusercontent.com/LL4nc33/doom-coding/main/scripts/in
 
 ### Installation Options
 
+**One-Line Install (Recommended):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/LL4nc33/doom-coding/main/scripts/install.sh | bash
+```
+
 **Interactive Installation:**
 ```bash
 git clone https://github.com/LL4nc33/doom-coding.git
-# Or via SSH:
-git clone git@github.com:LL4nc33/doom-coding.git
 cd doom-coding
 ./scripts/install.sh
+```
+
+**LXC / Local Network Installation (ohne Tailscale):**
+```bash
+./scripts/install.sh --skip-tailscale
+# oder
+./scripts/install.sh --local-network
+```
+
+**Terminal Environment (Lightweight):**
+```bash
+git clone https://github.com/LL4nc33/doom-coding.git
+cd doom-coding/terminal-dev-env
+sudo bash bin/install.sh
 ```
 
 **Unattended Installation:**
@@ -93,10 +133,46 @@ cd doom-coding
   --anthropic-key="sk-ant-xxx"
 ```
 
+### CLI Options
+
+| Option | Beschreibung |
+|--------|--------------|
+| `--unattended` | Vollautomatische Installation |
+| `--skip-tailscale` | Ohne Tailscale (lokales Netzwerk) |
+| `--local-network` | Alias für --skip-tailscale |
+| `--skip-docker` | Docker-Installation überspringen |
+| `--skip-terminal` | Terminal-Tools überspringen |
+| `--skip-hardening` | SSH-Hardening überspringen |
+| `--env-file=FILE` | Eigene Umgebungsdatei verwenden |
+| `--dry-run` | Nur anzeigen, nichts ausführen |
+| `--force` | Neuinstallation erzwingen |
+
+### Docker Compose Variants
+
+| Datei | Verwendung |
+|-------|------------|
+| `docker-compose.yml` | Standard mit Tailscale |
+| `docker-compose.lxc.yml` | LXC ohne Tailscale (lokales Netzwerk) |
+
+```bash
+# Standard (mit Tailscale)
+docker compose up -d
+
+# LXC / Lokales Netzwerk
+docker compose -f docker-compose.lxc.yml up -d
+```
+
 **Access Your Environment:**
+
+*With Tailscale:*
 1. Get your Tailscale IP: `tailscale status`
 2. Open code-server: `https://YOUR-TAILSCALE-IP:8443`
 3. SSH access: `ssh user@YOUR-TAILSCALE-IP`
+
+*Local Network (LXC):*
+1. Find your local IP: `hostname -I`
+2. Open code-server: `https://YOUR-LOCAL-IP:8443`
+3. Terminal Environment: `https://YOUR-LOCAL-IP/` (if using ttyd)
 
 ## 📖 Documentation
 
