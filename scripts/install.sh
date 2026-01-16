@@ -39,6 +39,7 @@ readonly INSTALLER_VERSION="1.0.0"
 # Default options
 UNATTENDED=false
 SKIP_DOCKER=false
+SKIP_TAILSCALE=false
 SKIP_TERMINAL=false
 SKIP_HARDENING=false
 SKIP_SECRETS=false
@@ -46,6 +47,7 @@ DRY_RUN=false
 VERBOSE=false
 FORCE=false
 ENV_FILE=""
+USE_TAILSCALE=true
 
 # Detected system info
 OS_ID=""
@@ -124,6 +126,8 @@ Doom Coding - One-Click Remote Development Environment Installer
 OPTIONS:
     --unattended        Run without interactive prompts
     --skip-docker       Skip Docker installation
+    --skip-tailscale    Skip Tailscale, use local network (for LXC)
+    --local-network     Alias for --skip-tailscale
     --skip-terminal     Skip terminal tools setup
     --skip-hardening    Skip SSH hardening
     --skip-secrets      Skip SOPS/age setup
@@ -138,6 +142,7 @@ OPTIONS:
 EXAMPLES:
     $0                              Interactive installation
     $0 --unattended                 Fully automated installation
+    $0 --skip-tailscale             LXC without TUN device
     $0 --skip-docker --skip-terminal  Minimal installation
     $0 --env-file=production.env    Use custom environment file
 
@@ -383,7 +388,158 @@ install_docker() {
     log_warning "You may need to log out and back in for docker group membership to take effect"
 }
 
+# ===========================================
+# TAILSCALE SETUP
+# ===========================================
+
+# Global variable for compose file selection
+COMPOSE_FILE="docker-compose.yml"
+
+check_tun_device() {
+    # Check if TUN device is available (required for Tailscale)
+    if [[ -c /dev/net/tun ]]; then
+        return 0
+    elif [[ -e /dev/net/tun ]]; then
+        # Exists but not a character device
+        return 1
+    else
+        return 1
+    fi
+}
+
+detect_container_type() {
+    # Detect if running in LXC, Docker, or bare-metal
+    if [[ -f /proc/1/environ ]] && grep -q "container=lxc" /proc/1/environ 2>/dev/null; then
+        echo "lxc"
+    elif [[ -f /.dockerenv ]]; then
+        echo "docker"
+    elif grep -q "docker\|lxc" /proc/1/cgroup 2>/dev/null; then
+        echo "container"
+    else
+        echo "bare-metal"
+    fi
+}
+
+setup_tailscale_choice() {
+    # Skip if already decided via command line
+    if [[ "$SKIP_TAILSCALE" == "true" ]]; then
+        log_info "Tailscale uebersprungen (--skip-tailscale)"
+        USE_TAILSCALE=false
+        COMPOSE_FILE="docker-compose.lxc.yml"
+        return 0
+    fi
+
+    local container_type
+    container_type=$(detect_container_type)
+    local tun_available=false
+
+    log_step "Checking Tailscale compatibility..."
+
+    # Check TUN device
+    if check_tun_device; then
+        tun_available=true
+        log_success "TUN device available (/dev/net/tun)"
+    else
+        log_warning "TUN device not available"
+    fi
+
+    log_info "Environment: ${container_type}"
+
+    # If in LXC without TUN, warn user
+    if [[ "$container_type" == "lxc" ]] && [[ "$tun_available" == "false" ]]; then
+        echo ""
+        log_warning "Du bist in einem LXC-Container ohne TUN-Device."
+        log_warning "Tailscale benoetigt TUN fuer VPN-Funktionalitaet."
+        echo ""
+        echo -e "${YELLOW}Optionen:${NC}"
+        echo "  1) Ohne Tailscale fortfahren (lokales Netzwerk, z.B. 192.168.x.x)"
+        echo "  2) TUN in LXC aktivieren (erfordert Proxmox-Host Konfiguration)"
+        echo "  3) Installation abbrechen"
+        echo ""
+
+        if [[ "$UNATTENDED" == "true" ]]; then
+            log_info "Unattended mode: Verwende lokales Netzwerk (ohne Tailscale)"
+            USE_TAILSCALE=false
+            COMPOSE_FILE="docker-compose.lxc.yml"
+            return 0
+        fi
+
+        local choice
+        read -rp "Auswahl [1/2/3]: " choice
+        case "$choice" in
+            1)
+                USE_TAILSCALE=false
+                COMPOSE_FILE="docker-compose.lxc.yml"
+                log_info "Verwende lokales Netzwerk (docker-compose.lxc.yml)"
+                ;;
+            2)
+                echo ""
+                echo -e "${BLUE}Auf dem Proxmox-Host ausfuehren:${NC}"
+                echo ""
+                echo "  nano /etc/pve/lxc/<CONTAINER_ID>.conf"
+                echo ""
+                echo "  # Diese Zeilen hinzufuegen:"
+                echo "  lxc.cgroup2.devices.allow: c 10:200 rwm"
+                echo "  lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"
+                echo ""
+                echo "  # Dann Container neustarten:"
+                echo "  pct restart <CONTAINER_ID>"
+                echo ""
+                log_error "Bitte TUN aktivieren und Installer erneut ausfuehren."
+                exit 0
+                ;;
+            3)
+                log_info "Installation abgebrochen."
+                exit 0
+                ;;
+            *)
+                log_error "Ungueltige Auswahl"
+                exit 1
+                ;;
+        esac
+    else
+        # TUN available or bare-metal - ask if user wants Tailscale
+        if [[ "$UNATTENDED" == "true" ]]; then
+            USE_TAILSCALE=true
+            return 0
+        fi
+
+        echo ""
+        echo -e "${BLUE}Netzwerk-Konfiguration:${NC}"
+        echo ""
+        echo "  1) Mit Tailscale (empfohlen fuer Remote-Zugriff via VPN)"
+        echo "  2) Lokales Netzwerk (direkter Zugriff via IP, z.B. 192.168.178.78)"
+        echo ""
+
+        local choice
+        read -rp "Auswahl [1/2] (Standard: 1): " choice
+        choice="${choice:-1}"
+
+        case "$choice" in
+            1)
+                USE_TAILSCALE=true
+                COMPOSE_FILE="docker-compose.yml"
+                log_info "Verwende Tailscale (docker-compose.yml)"
+                ;;
+            2)
+                USE_TAILSCALE=false
+                COMPOSE_FILE="docker-compose.lxc.yml"
+                log_info "Verwende lokales Netzwerk (docker-compose.lxc.yml)"
+                ;;
+            *)
+                USE_TAILSCALE=true
+                COMPOSE_FILE="docker-compose.yml"
+                ;;
+        esac
+    fi
+}
+
 install_tailscale() {
+    if [[ "${USE_TAILSCALE:-true}" != "true" ]]; then
+        log_info "Tailscale uebersprungen (lokales Netzwerk gewaehlt)"
+        return 0
+    fi
+
     log_step "Installing Tailscale..."
 
     if command -v tailscale &>/dev/null && [[ "$FORCE" != "true" ]]; then
@@ -441,18 +597,38 @@ start_services() {
     cd "$PROJECT_DIR"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY RUN] Would start Docker services"
+        log_info "[DRY RUN] Would start Docker services with ${COMPOSE_FILE}"
         return 0
     fi
 
+    # Check if compose file exists
+    if [[ ! -f "$COMPOSE_FILE" ]]; then
+        log_error "Compose file not found: ${COMPOSE_FILE}"
+        return 1
+    fi
+
+    log_info "Using compose file: ${COMPOSE_FILE}"
+
     # Validate compose file
-    docker compose config > /dev/null
+    docker compose -f "$COMPOSE_FILE" config > /dev/null
 
     # Build and start
-    docker compose build
-    docker compose up -d
+    docker compose -f "$COMPOSE_FILE" build
+    docker compose -f "$COMPOSE_FILE" up -d
 
     log_success "Services started"
+
+    # Show access info
+    echo ""
+    if [[ "${USE_TAILSCALE:-true}" == "true" ]]; then
+        log_info "Zugriff via Tailscale IP (nach 'tailscale up'):"
+        echo "  code-server: https://<TAILSCALE-IP>:8443"
+    else
+        local host_ip
+        host_ip=$(hostname -I | awk '{print $1}')
+        log_info "Zugriff via lokales Netzwerk:"
+        echo "  code-server: https://${host_ip}:8443"
+    fi
 }
 
 # ===========================================
@@ -467,6 +643,12 @@ parse_arguments() {
                 ;;
             --skip-docker)
                 SKIP_DOCKER=true
+                shift
+                ;;
+            --skip-tailscale|--local-network|--no-tailscale)
+                SKIP_TAILSCALE=true
+                USE_TAILSCALE=false
+                COMPOSE_FILE="docker-compose.lxc.yml"
                 shift
                 ;;
             --skip-terminal)
@@ -544,6 +726,9 @@ main() {
     # Installation steps
     install_base_packages
     install_docker
+
+    # Tailscale setup (interactive choice)
+    setup_tailscale_choice
     install_tailscale
 
     # Terminal tools
