@@ -34,7 +34,7 @@ else
     fi
 fi
 readonly LOG_FILE="${LOG_FILE:-/var/log/doom-coding-install.log}"
-readonly INSTALLER_VERSION="1.0.0"
+readonly INSTALLER_VERSION="0.0.4"
 
 # Default options
 UNATTENDED=false
