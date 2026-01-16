@@ -1,0 +1,76 @@
+# Doom Coding Docker Compose - Local Network Version
+# Fuer LXC-Container ohne TUN-Device Support (kein Tailscale)
+# Zugriff direkt ueber lokales Netzwerk (z.B. 192.168.178.78)
+
+services:
+  # code-server - VS Code in the browser
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: doom-code-server
+    restart: unless-stopped
+    ports:
+      - "8443:8443"    # code-server HTTPS
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Berlin}
+      - PASSWORD=${CODE_SERVER_PASSWORD}
+      - SUDO_PASSWORD=${SUDO_PASSWORD}
+      - DEFAULT_WORKSPACE=/workspace
+    volumes:
+      - code-server-config:/config
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - ./config/zsh/.zshrc:/config/.zshrc:ro
+      - ./config/tmux/tmux.conf:/config/.tmux.conf:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "com.doom-coding.service=code-server"
+      - "com.doom-coding.color=#7C5E46"
+
+  # Claude Code Container - Native installation
+  claude:
+    build:
+      context: .
+      dockerfile: Dockerfile.claude
+      args:
+        - TARGETARCH=${TARGETARCH:-amd64}
+    container_name: doom-claude
+    restart: unless-stopped
+    ports:
+      - "7681:7681"    # ttyd Web Terminal (falls aktiviert)
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Berlin}
+    secrets:
+      - anthropic_api_key
+    volumes:
+      - claude-config:/home/claude/.claude
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - ./config/zsh/.zshrc:/home/claude/.zshrc:ro
+      - ./config/tmux/tmux.conf:/config/.tmux.conf:ro
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    labels:
+      - "com.doom-coding.service=claude"
+      - "com.doom-coding.color=#A47D5B"
+
+secrets:
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key.txt
+
+volumes:
+  code-server-config:
+    name: doom-code-server-config
+  claude-config:
+    name: doom-claude-config
+
+networks:
+  default:
+    name: doom-coding-network
