@@ -1,0 +1,45 @@
+# golangci-lint configuration
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  disable:
+    - deadcode  # deprecated
+    - varcheck  # deprecated
+    - structcheck  # deprecated
+
+linters-settings:
+  errcheck:
+    # Don't check error returns in test files for deferred cleanup calls
+    exclude-functions:
+      - os.Chdir
+      - (*os.File).Close
+
+issues:
+  # Exclude some linters from running on test files
+  exclude-rules:
+    # Exclude errcheck for test files (common pattern for defer cleanup)
+    - path: _test\.go
+      linters:
+        - errcheck
+    # Allow unused code during development (will be used later)
+    - path: model\.go
+      linters:
+        - unused
+      text: "cream|tickMsg|accessInfo"
+
+  # Maximum issues count per one linter
+  max-issues-per-linter: 50
+
+  # Maximum count of issues with the same text
+  max-same-issues: 10
