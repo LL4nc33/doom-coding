@@ -1,0 +1,193 @@
+# Doom Coding Docker Compose - LXC mit Tailscale (Userspace Mode)
+# Für LXC-Container OHNE TUN-Device - verwendet Tailscale Userspace Networking
+#
+# Userspace Networking: Tailscale läuft ohne /dev/net/tun
+# - Nutzt SOCKS5/HTTP Proxy statt VPN-Tunnel
+# - Services werden via `tailscale serve` exponiert
+# - Kein NET_ADMIN oder SYS_MODULE erforderlich in LXC
+
+services:
+  # Tailscale im Userspace Mode - kein TUN-Device erforderlich
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: doom-tailscale
+    hostname: doom-coding
+    restart: unless-stopped
+    # Keine privilegierten Capabilities nötig für Userspace Mode
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      # KEIN /dev/net/tun Volume - Userspace Mode braucht das nicht!
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SOCKET=/var/run/tailscale/tailscaled.sock
+      # WICHTIG: Userspace Networking aktivieren
+      - TS_USERSPACE=true
+      - TS_ACCEPT_DNS=${TS_ACCEPT_DNS:-false}
+      - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:---advertise-tags=tag:doom-coding}
+      # Serve Konfiguration für code-server
+      - TS_SERVE_CONFIG=/config/serve.json
+    healthcheck:
+      test: ["CMD", "tailscale", "status", "--json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.doom-coding.service=tailscale"
+      - "com.doom-coding.mode=userspace"
+      - "com.doom-coding.color=#2E521D"
+
+  # code-server - VS Code in the browser
+  # Verbindet sich mit Tailscale über internes Docker Netzwerk
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: doom-code-server
+    restart: unless-stopped
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    ports:
+      # Lokaler Zugriff als Fallback (optional)
+      - "8443:8443"
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Berlin}
+      - PASSWORD=${CODE_SERVER_PASSWORD}
+      - SUDO_PASSWORD=${SUDO_PASSWORD}
+      - DEFAULT_WORKSPACE=/workspace
+      # Proxy-Konfiguration für Tailscale Userspace
+      - HTTP_PROXY=socks5://tailscale:1055
+      - HTTPS_PROXY=socks5://tailscale:1055
+    volumes:
+      - code-server-config:/config
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - ./config/zsh/.zshrc:/config/.zshrc:ro
+      - ./config/tmux/tmux.conf:/config/.tmux.conf:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.doom-coding.service=code-server"
+      - "com.doom-coding.color=#7C5E46"
+
+  # Claude Code Container
+  claude:
+    build:
+      context: .
+      dockerfile: Dockerfile.claude
+      args:
+        - TARGETARCH=${TARGETARCH:-amd64}
+    container_name: doom-claude
+    restart: unless-stopped
+    depends_on:
+      tailscale:
+        condition: service_healthy
+    ports:
+      - "7681:7681"
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Berlin}
+      # Proxy-Konfiguration für Tailscale Userspace
+      - HTTP_PROXY=socks5://tailscale:1055
+      - HTTPS_PROXY=socks5://tailscale:1055
+    secrets:
+      - anthropic_api_key
+    volumes:
+      - claude-config:/home/claude/.claude
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - ./config/zsh/.zshrc:/home/claude/.zshrc:ro
+      - ./config/tmux/tmux.conf:/home/claude/.tmux.conf:ro
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.doom-coding.service=claude"
+      - "com.doom-coding.color=#A47D5B"
+
+  # Tailscale Serve Proxy - exponiert Services über Tailscale Netzwerk
+  # Dieser Container richtet die Serve-Konfiguration ein
+  tailscale-serve:
+    image: tailscale/tailscale:stable
+    container_name: doom-tailscale-serve
+    restart: "no"
+    depends_on:
+      tailscale:
+        condition: service_healthy
+      code-server:
+        condition: service_healthy
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    environment:
+      - TS_SOCKET=/var/lib/tailscale/tailscaled.sock
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Warte kurz auf vollständige Initialisierung
+        sleep 5
+
+        # Serve code-server über Tailscale (Port 443 -> code-server:8443)
+        tailscale serve --bg https+insecure://code-server:8443
+
+        echo "Tailscale Serve konfiguriert!"
+        echo "code-server ist jetzt über https://$$(tailscale ip -4):443 erreichbar"
+
+        # Container beenden (einmalige Setup-Aufgabe)
+        exit 0
+
+secrets:
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key.txt
+
+volumes:
+  tailscale-state:
+    name: doom-tailscale-state
+  code-server-config:
+    name: doom-code-server-config
+  claude-config:
+    name: doom-claude-config
+
+networks:
+  default:
+    name: doom-coding-network

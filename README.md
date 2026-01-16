@@ -77,13 +77,20 @@ Full-featured deployment with VS Code in browser and secure Tailscale networking
 - **Requirements**: Docker, TUN device for Tailscale
 - **Access**: Via Tailscale IP (100.x.x.x)
 
-### Option 2: Docker + Local Network (LXC)
-Docker deployment without Tailscale - access via local network IP.
-- **Best for**: LXC containers, home lab setups
-- **Requirements**: Docker only (no TUN device needed)
+### Option 2: Docker + Tailscale Userspace (LXC) ⭐ NEU
+Tailscale in LXC-Containern **ohne TUN-Device** - verwendet Userspace Networking.
+- **Best for**: Proxmox LXC Container mit Tailscale VPN
+- **Requirements**: Docker only (kein TUN-Device erforderlich!)
+- **Access**: Via Tailscale IP (100.x.x.x)
+- **Compose File**: `docker-compose.lxc-tailscale.yml`
+
+### Option 3: Docker + Local Network (LXC)
+Docker deployment ohne Tailscale - Zugriff via lokales Netzwerk.
+- **Best for**: LXC containers, home lab setups ohne VPN
+- **Requirements**: Docker only
 - **Access**: Via local IP (192.168.x.x)
 
-### Option 3: Terminal Environment (Lightweight)
+### Option 4: Terminal Environment (Lightweight)
 Bare-metal ttyd + tmux + neovim setup without Docker.
 - **Best for**: Resource-constrained systems, mobile access
 - **Requirements**: systemd, ~200MB RAM
@@ -168,14 +175,18 @@ sudo bash bin/install.sh
 
 | Datei | Verwendung |
 |-------|------------|
-| `docker-compose.yml` | Standard mit Tailscale |
-| `docker-compose.lxc.yml` | LXC ohne Tailscale (lokales Netzwerk) |
+| `docker-compose.yml` | Standard mit Tailscale (TUN erforderlich) |
+| `docker-compose.lxc-tailscale.yml` | **LXC mit Tailscale Userspace** (kein TUN!) |
+| `docker-compose.lxc.yml` | LXC ohne Tailscale (nur lokales Netzwerk) |
 
 ```bash
-# Standard (mit Tailscale)
+# Standard (mit Tailscale, TUN erforderlich)
 docker compose up -d
 
-# LXC / Lokales Netzwerk
+# LXC mit Tailscale Userspace Mode (EMPFOHLEN für LXC)
+docker compose -f docker-compose.lxc-tailscale.yml up -d
+
+# LXC ohne Tailscale (nur lokales Netzwerk)
 docker compose -f docker-compose.lxc.yml up -d
 ```
 

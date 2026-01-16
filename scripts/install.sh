@@ -244,10 +244,10 @@ confirm() {
 
     local yn
     if [[ "$default" == "y" ]]; then
-        read -rp "$prompt [Y/n]: " yn
+        read -rp "$prompt [Y/n]: " yn < /dev/tty
         yn="${yn:-y}"
     else
-        read -rp "$prompt [y/N]: " yn
+        read -rp "$prompt [y/N]: " yn < /dev/tty
         yn="${yn:-n}"
     fi
 
@@ -277,7 +277,7 @@ prompt_value() {
         read -rsp "$prompt [$default]: " value
         echo ""
     else
-        read -rp "$prompt [$default]: " value
+        read -rp "$prompt [$default]: " value < /dev/tty
     fi
 
     # Use declare -g for safer global variable assignment
@@ -622,30 +622,46 @@ setup_tailscale_choice() {
     if [[ "$container_type" == "lxc" ]] && [[ "$tun_available" == "false" ]]; then
         echo ""
         log_warning "Du bist in einem LXC-Container ohne TUN-Device."
-        log_warning "Tailscale benoetigt TUN fuer VPN-Funktionalitaet."
         echo ""
         echo -e "${YELLOW}Optionen:${NC}"
-        echo "  1) Ohne Tailscale fortfahren (lokales Netzwerk, z.B. 192.168.x.x)"
-        echo "  2) TUN in LXC aktivieren (erfordert Proxmox-Host Konfiguration)"
-        echo "  3) Installation abbrechen"
+        echo "  1) ${GREEN}Tailscale Userspace Mode (EMPFOHLEN)${NC}"
+        echo "     - Funktioniert ohne TUN-Device in LXC"
+        echo "     - Voller Tailscale VPN Zugriff (100.x.x.x)"
+        echo ""
+        echo "  2) Ohne Tailscale (nur lokales Netzwerk)"
+        echo "     - Zugriff nur via LAN IP (z.B. 192.168.x.x)"
+        echo ""
+        echo "  3) TUN in LXC aktivieren (Proxmox-Host Konfiguration)"
+        echo "     - Erfordert Aenderungen auf dem Proxmox Host"
+        echo ""
+        echo "  4) Installation abbrechen"
         echo ""
 
         if [[ "$UNATTENDED" == "true" ]]; then
-            log_info "Unattended mode: Verwende lokales Netzwerk (ohne Tailscale)"
-            USE_TAILSCALE=false
-            COMPOSE_FILE="docker-compose.lxc.yml"
+            log_info "Unattended mode: Verwende Tailscale Userspace Mode"
+            USE_TAILSCALE=true
+            TS_USERSPACE=true
+            COMPOSE_FILE="docker-compose.lxc-tailscale.yml"
             return 0
         fi
 
         local choice
-        read -rp "Auswahl [1/2/3]: " choice
+        read -rp "Auswahl [1/2/3/4] (Standard: 1): " choice < /dev/tty
+        choice="${choice:-1}"
         case "$choice" in
             1)
+                USE_TAILSCALE=true
+                TS_USERSPACE=true
+                COMPOSE_FILE="docker-compose.lxc-tailscale.yml"
+                log_success "Verwende Tailscale Userspace Mode (docker-compose.lxc-tailscale.yml)"
+                log_info "Kein TUN-Device erforderlich!"
+                ;;
+            2)
                 USE_TAILSCALE=false
                 COMPOSE_FILE="docker-compose.lxc.yml"
                 log_info "Verwende lokales Netzwerk (docker-compose.lxc.yml)"
                 ;;
-            2)
+            3)
                 echo ""
                 echo -e "${BLUE}Auf dem Proxmox-Host ausfuehren:${NC}"
                 echo ""
@@ -661,7 +677,7 @@ setup_tailscale_choice() {
                 log_error "Bitte TUN aktivieren und Installer erneut ausfuehren."
                 exit 0
                 ;;
-            3)
+            4)
                 log_info "Installation abgebrochen."
                 exit 0
                 ;;
@@ -685,7 +701,7 @@ setup_tailscale_choice() {
         echo ""
 
         local choice
-        read -rp "Auswahl [1/2] (Standard: 1): " choice
+        read -rp "Auswahl [1/2] (Standard: 1): " choice < /dev/tty
         choice="${choice:-1}"
 
         case "$choice" in
