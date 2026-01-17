@@ -771,7 +771,7 @@ main() {
     echo ""
     echo "=========================================="
     echo "  Terminal Development Environment"
-    echo "  Installer v0.0.6"
+    echo "  Installer v0.0.6a"
     echo "=========================================="
     echo ""
 

@@ -2,7 +2,7 @@
 
 > A remote development environment with Tailscale networking, code-server, and Claude Code integration.
 >
-> **Version 0.0.6** - Now with QR code generation for instant mobile access!
+> **Version 0.0.6a** - Now with QR code generation for instant mobile access!
 
 <p align="center">
   <img src="logo/favicon.png" width="128" height="128" alt="Doom Coding Logo">
@@ -77,26 +77,42 @@ curl -fsSL https://raw.githubusercontent.com/LL4nc33/doom-coding/main/scripts/in
 
 ## 🎯 Deployment Options
 
-### Option 1: Docker + Tailscale (Standard)
+### Option 1: Native Tailscale Userspace (LXC) ⭐ EMPFOHLEN
+Tailscale wird **direkt auf dem LXC-Host** installiert (nicht in Docker).
+- **Best for**: Proxmox LXC Container - niedrigster Ressourcenverbrauch!
+- **Requirements**: Docker only (kein TUN-Device erforderlich!)
+- **Access**: Via Tailscale IP (https://100.x.x.x/)
+- **Compose File**: `docker-compose.native-userspace.yml`
+- **CLI**: `--native-userspace`
+
+### Option 2: Docker Tailscale Userspace (LXC)
+Tailscale in LXC-Containern **ohne TUN-Device** - verwendet Docker Container.
+- **Best for**: Proxmox LXC Container mit vollständiger Container-Isolation
+- **Requirements**: Docker only (kein TUN-Device erforderlich!)
+- **Access**: Via Tailscale IP (100.x.x.x:8443)
+- **Compose File**: `docker-compose.lxc-tailscale.yml`
+
+### Option 3: Docker + Tailscale (Standard)
 Full-featured deployment with VS Code in browser and secure Tailscale networking.
-- **Best for**: Remote access, security-focused setups
+- **Best for**: Bare-metal Server, VMs mit TUN-Device
 - **Requirements**: Docker, TUN device for Tailscale
 - **Access**: Via Tailscale IP (100.x.x.x)
 
-### Option 2: Docker + Tailscale Userspace (LXC) ⭐ NEU
-Tailscale in LXC-Containern **ohne TUN-Device** - verwendet Userspace Networking.
-- **Best for**: Proxmox LXC Container mit Tailscale VPN
-- **Requirements**: Docker only (kein TUN-Device erforderlich!)
-- **Access**: Via Tailscale IP (100.x.x.x)
-- **Compose File**: `docker-compose.lxc-tailscale.yml`
+### Option 4: Host Tailscale verwenden
+Nutzt bereits installiertes Tailscale auf dem Host.
+- **Best for**: Systeme mit vorkonfiguriertem Tailscale
+- **Requirements**: Tailscale muss bereits auf dem Host installiert sein
+- **Access**: Via Host Tailscale IP (100.x.x.x:8443)
+- **CLI**: `--native-tailscale`
 
-### Option 3: Docker + Local Network (LXC)
+### Option 5: Docker + Local Network (LXC)
 Docker deployment ohne Tailscale - Zugriff via lokales Netzwerk.
 - **Best for**: LXC containers, home lab setups ohne VPN
 - **Requirements**: Docker only
-- **Access**: Via local IP (192.168.x.x)
+- **Access**: Via local IP (192.168.x.x:8443)
+- **CLI**: `--skip-tailscale` oder `--local-network`
 
-### Option 4: Terminal Environment (Lightweight)
+### Option 6: Terminal Environment (Lightweight)
 Bare-metal ttyd + tmux + neovim setup without Docker.
 - **Best for**: Resource-constrained systems, mobile access
 - **Requirements**: systemd, ~200MB RAM
@@ -168,6 +184,8 @@ sudo bash bin/install.sh
 | Option | Beschreibung |
 |--------|--------------|
 | `--unattended` | Vollautomatische Installation |
+| `--native-userspace` | Native Tailscale Userspace auf LXC Host (empfohlen) |
+| `--native-tailscale` | Vorhandenes Host-Tailscale verwenden |
 | `--skip-tailscale` | Ohne Tailscale (lokales Netzwerk) |
 | `--local-network` | Alias für --skip-tailscale |
 | `--skip-docker` | Docker-Installation überspringen |
@@ -181,16 +199,23 @@ sudo bash bin/install.sh
 
 | Datei | Verwendung |
 |-------|------------|
+| `docker-compose.native-userspace.yml` | **Native LXC Tailscale (EMPFOHLEN)** - Tailscale auf Host |
+| `docker-compose.lxc-tailscale.yml` | Docker Tailscale Userspace (kein TUN!) |
+| `docker-compose.native-tailscale.yml` | Host-Tailscale verwenden (vorkonfiguriert) |
 | `docker-compose.yml` | Standard mit Tailscale (TUN erforderlich) |
-| `docker-compose.lxc-tailscale.yml` | **LXC mit Tailscale Userspace** (kein TUN!) |
 | `docker-compose.lxc.yml` | LXC ohne Tailscale (nur lokales Netzwerk) |
 
 ```bash
+# Native Tailscale Userspace (EMPFOHLEN für LXC)
+./scripts/install.sh --native-userspace
+# oder manuell:
+docker compose -f docker-compose.native-userspace.yml up -d
+
+# Docker Tailscale Userspace Mode
+docker compose -f docker-compose.lxc-tailscale.yml up -d
+
 # Standard (mit Tailscale, TUN erforderlich)
 docker compose up -d
-
-# LXC mit Tailscale Userspace Mode (EMPFOHLEN für LXC)
-docker compose -f docker-compose.lxc-tailscale.yml up -d
 
 # LXC ohne Tailscale (nur lokales Netzwerk)
 docker compose -f docker-compose.lxc.yml up -d

@@ -16,6 +16,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Placeholder for future changes
 
+## [0.0.6a] - 2025-01-17
+
+### Added
+- **Native Tailscale Userspace Mode**: Revolutionary LXC deployment without TUN device requirements
+- **tailscaled-userspace systemd Service**: Native Tailscale runs directly on LXC host (not in Docker)
+- **Tailscale Serve Integration**: Automatic port exposure via `tailscale serve` on port 443
+- **docker-compose.native-userspace.yml**: New compose file for native userspace deployments
+- **Localhost-Only Binding**: Services bind to 127.0.0.1 for enhanced security
+- **Automatic Mode Detection**: Health-check script detects native userspace mode
+- **--native-userspace CLI Flag**: New installer option for native deployment
+
+### Changed
+- **Deployment Options**: Reorganized with Native Userspace as recommended option for LXC
+- **Health Check Script**: Enhanced detection for native userspace mode (systemctl checks)
+- **README Deployment Section**: Updated with 6 deployment options, Native Userspace highlighted as recommended
+- **Installation Script**: Added NATIVE_USERSPACE flag and detection logic
+
+### Technical Details
+
+#### Native Userspace Architecture
+- **No Docker Tailscale Container**: Eliminates container overhead
+- **Direct Host Integration**: Tailscale runs as systemd service on LXC host
+- **Port 443 Exposure**: code-server accessible via `https://100.x.x.x/` (no port number needed)
+- **Resource Savings**: Lowest memory footprint (~50MB less than containerized Tailscale)
+
+#### Security Enhancements
+- **Localhost Binding**: Services only accessible via Tailscale Serve proxy
+- **No Direct Port Exposure**: Eliminates attack surface on host network
+- **Tailscale Authentication**: All access controlled by Tailscale identity
+
+#### Deployment Comparison
+| Mode | Container Count | Memory Usage | TUN Required | Best For |
+|------|----------------|--------------|--------------|----------|
+| Native Userspace | 2 (no Tailscale) | ~1.2GB | No | LXC, Proxmox |
+| Docker Userspace | 3 (with Tailscale) | ~1.5GB | No | LXC with isolation |
+| Standard | 3 (with Tailscale) | ~1.7GB | Yes | VMs, bare-metal |
+
 ## [0.0.6] - 2025-01-17
 
 ### Added

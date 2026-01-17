@@ -34,7 +34,7 @@ else
     fi
 fi
 readonly LOG_FILE="${LOG_FILE:-/var/log/doom-coding-install.log}"
-readonly INSTALLER_VERSION="0.0.6"
+readonly INSTALLER_VERSION="0.0.6a"
 
 # Default options
 UNATTENDED=false
@@ -49,6 +49,7 @@ FORCE=false
 ENV_FILE=""
 USE_TAILSCALE=true
 NATIVE_TAILSCALE=false
+NATIVE_USERSPACE=false
 
 # Unattended installation values
 TAILSCALE_KEY=""
@@ -334,6 +335,7 @@ OPTIONS:
     --skip-tailscale    Skip Tailscale, use local network (for LXC)
     --local-network     Alias for --skip-tailscale
     --native-tailscale  Use existing Tailscale on host (no container)
+    --native-userspace  Install Tailscale in userspace mode directly on LXC host
     --skip-terminal     Skip terminal tools setup
     --skip-hardening    Skip SSH hardening
     --skip-secrets      Skip SOPS/age setup
@@ -359,6 +361,7 @@ EXAMPLES:
     $0 --force                      Remove conflicts automatically
     $0 --skip-tailscale             LXC without TUN device
     $0 --native-tailscale           Use host's existing Tailscale
+    $0 --native-userspace           Install native Tailscale in LXC (userspace)
     $0 --unattended --force \\
       --tailscale-key="tskey-auth-xxx" \\
       --code-password="secure-password" \\
@@ -956,44 +959,66 @@ setup_tailscale_choice() {
         log_warning "Du bist in einem LXC-Container ohne TUN-Device."
         echo ""
         echo -e "${YELLOW}Optionen:${NC}"
-        echo "  1) ${GREEN}Tailscale Userspace Mode (EMPFOHLEN)${NC}"
-        echo "     - Funktioniert ohne TUN-Device in LXC"
-        echo "     - Voller Tailscale VPN Zugriff (100.x.x.x)"
+        echo "  1) ${GREEN}Native Tailscale Userspace (EMPFOHLEN fuer LXC)${NC}"
+        echo "     - Installiert Tailscale direkt auf dem LXC Host"
+        echo "     - Kein Docker-Container fuer Tailscale noetig"
+        echo "     - Geringster Ressourcenverbrauch"
         echo ""
-        echo "  2) Ohne Tailscale (nur lokales Netzwerk)"
+        echo "  2) Docker Tailscale Userspace"
+        echo "     - Tailscale laeuft in Docker Container"
+        echo "     - SOCKS5 Proxy fuer Services"
+        echo ""
+        echo "  3) Ohne Tailscale (nur lokales Netzwerk)"
         echo "     - Zugriff nur via LAN IP (z.B. 192.168.x.x)"
         echo ""
-        echo "  3) TUN in LXC aktivieren (Proxmox-Host Konfiguration)"
+        echo "  4) Host Tailscale verwenden (vorkonfiguriert)"
+        echo "     - Nutzt bereits installiertes Host-Tailscale"
+        echo ""
+        echo "  5) TUN in LXC aktivieren (Proxmox-Host Konfiguration)"
         echo "     - Erfordert Aenderungen auf dem Proxmox Host"
         echo ""
-        echo "  4) Installation abbrechen"
+        echo "  6) Installation abbrechen"
         echo ""
 
         if [[ "$UNATTENDED" == "true" ]]; then
-            log_info "Unattended mode: Verwende Tailscale Userspace Mode"
+            log_info "Unattended mode: Verwende Native Tailscale Userspace Mode"
+            NATIVE_USERSPACE=true
             USE_TAILSCALE=true
-            TS_USERSPACE=true
-            COMPOSE_FILE="docker-compose.lxc-tailscale.yml"
+            COMPOSE_FILE="docker-compose.native-userspace.yml"
             return 0
         fi
 
         local choice
-        read -rp "Auswahl [1/2/3/4] (Standard: 1): " choice < /dev/tty
+        read -rp "Auswahl [1/2/3/4/5/6] (Standard: 1): " choice < /dev/tty
         choice="${choice:-1}"
         case "$choice" in
             1)
+                NATIVE_USERSPACE=true
+                USE_TAILSCALE=true
+                COMPOSE_FILE="docker-compose.native-userspace.yml"
+                log_success "Verwende Native Tailscale Userspace Mode"
+                log_info "Tailscale wird direkt auf dem LXC Host installiert"
+                ;;
+            2)
                 USE_TAILSCALE=true
                 TS_USERSPACE=true
                 COMPOSE_FILE="docker-compose.lxc-tailscale.yml"
-                log_success "Verwende Tailscale Userspace Mode (docker-compose.lxc-tailscale.yml)"
+                log_success "Verwende Docker Tailscale Userspace Mode (docker-compose.lxc-tailscale.yml)"
                 log_info "Kein TUN-Device erforderlich!"
                 ;;
-            2)
+            3)
                 USE_TAILSCALE=false
                 COMPOSE_FILE="docker-compose.lxc.yml"
                 log_info "Verwende lokales Netzwerk (docker-compose.lxc.yml)"
                 ;;
-            3)
+            4)
+                NATIVE_TAILSCALE=true
+                USE_TAILSCALE=false
+                SKIP_TAILSCALE=true
+                COMPOSE_FILE="docker-compose.native-tailscale.yml"
+                log_info "Verwende vorhandenes Host-Tailscale (docker-compose.native-tailscale.yml)"
+                ;;
+            5)
                 echo ""
                 echo -e "${BLUE}Auf dem Proxmox-Host ausfuehren:${NC}"
                 echo ""
@@ -1009,7 +1034,7 @@ setup_tailscale_choice() {
                 log_error "Bitte TUN aktivieren und Installer erneut ausfuehren."
                 exit 0
                 ;;
-            4)
+            6)
                 log_info "Installation abgebrochen."
                 exit 0
                 ;;
@@ -1141,6 +1166,154 @@ setup_native_tailscale() {
     fi
 
     log_success "Native Tailscale mode configured"
+}
+
+install_native_tailscale_userspace() {
+    log_step "Installing Tailscale in native userspace mode..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY RUN] Would install Tailscale in userspace mode"
+        return 0
+    fi
+
+    # Install Tailscale if not already present
+    if ! command -v tailscale &>/dev/null; then
+        log_step "Installing Tailscale..."
+        verified_download_and_run \
+            "https://tailscale.com/install.sh" \
+            "${KNOWN_CHECKSUMS[tailscale]:-}" \
+            "Tailscale installer"
+    else
+        log_success "Tailscale already installed: $(tailscale version | head -1)"
+    fi
+
+    # Stop existing tailscaled if running
+    sudo systemctl stop tailscaled 2>/dev/null || true
+
+    # Create state directory
+    sudo mkdir -p /var/lib/tailscale
+
+    # Create systemd service for userspace mode
+    log_step "Creating Tailscale userspace systemd service..."
+    sudo tee /etc/systemd/system/tailscaled-userspace.service > /dev/null << 'SYSTEMD_EOF'
+[Unit]
+Description=Tailscale node agent (userspace networking mode)
+Documentation=https://tailscale.com/kb/
+Wants=network-pre.target
+After=network-pre.target NetworkManager.service systemd-resolved.service
+
+[Service]
+ExecStart=/usr/sbin/tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/var/run/tailscale/tailscaled.sock --tun=userspace-networking
+ExecStopPost=/usr/sbin/tailscaled --cleanup
+Restart=on-failure
+RuntimeDirectory=tailscale
+RuntimeDirectoryMode=0755
+StateDirectory=tailscale
+StateDirectoryMode=0700
+CacheDirectory=tailscale
+CacheDirectoryMode=0750
+Type=notify
+Environment=TS_DEBUG_FIREWALL_MODE=auto
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD_EOF
+
+    # Disable standard tailscaled service if exists
+    sudo systemctl disable tailscaled 2>/dev/null || true
+
+    # Enable and start userspace service
+    sudo systemctl daemon-reload
+    sudo systemctl enable tailscaled-userspace
+    sudo systemctl start tailscaled-userspace
+
+    # Wait for service to be ready
+    log_step "Waiting for Tailscale daemon..."
+    local attempts=0
+    while [[ $attempts -lt 30 ]]; do
+        if sudo tailscale status &>/dev/null 2>&1; then
+            break
+        fi
+        ((attempts++))
+        sleep 1
+    done
+
+    # Authenticate with Tailscale
+    if [[ -n "$TAILSCALE_KEY" ]]; then
+        log_step "Authenticating with Tailscale using auth key..."
+        sudo tailscale up --authkey="$TAILSCALE_KEY" --accept-routes=false
+    else
+        log_step "Starting Tailscale authentication..."
+        echo ""
+        log_info "Please authenticate Tailscale in your browser"
+        echo ""
+
+        if [[ "$UNATTENDED" == "true" ]]; then
+            log_warning "No auth key provided in unattended mode"
+            log_info "Run 'sudo tailscale up' after installation to authenticate"
+        else
+            sudo tailscale up --accept-routes=false
+        fi
+    fi
+
+    # Get and display Tailscale IP
+    local ts_ip
+    ts_ip=$(tailscale ip -4 2>/dev/null || echo "")
+
+    if [[ -n "$ts_ip" ]]; then
+        log_success "Tailscale connected: $ts_ip"
+    else
+        log_warning "Could not get Tailscale IP - run 'tailscale ip' after authentication"
+    fi
+
+    log_success "Native Tailscale userspace mode installed"
+}
+
+setup_tailscale_serve() {
+    log_step "Setting up Tailscale Serve..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY RUN] Would configure Tailscale Serve"
+        return 0
+    fi
+
+    # Check if Tailscale is running
+    if ! tailscale status &>/dev/null; then
+        log_warning "Tailscale not running, skipping serve setup"
+        return 0
+    fi
+
+    # Wait for services to be available
+    log_step "Waiting for Docker services to start..."
+    local attempts=0
+    while [[ $attempts -lt 60 ]]; do
+        if curl -sf -o /dev/null "http://127.0.0.1:8443" -k 2>/dev/null; then
+            break
+        fi
+        ((attempts++))
+        sleep 2
+    done
+
+    # Run the setup script if available
+    if [[ -x "${SCRIPT_DIR}/setup-tailscale-serve.sh" ]]; then
+        "${SCRIPT_DIR}/setup-tailscale-serve.sh" setup
+    else
+        # Fallback: configure serve manually
+        log_step "Configuring Tailscale Serve for code-server..."
+        tailscale serve --bg --https=443 http://127.0.0.1:8443 2>/dev/null || \
+            tailscale serve --bg 443 http://127.0.0.1:8443 2>/dev/null || \
+            log_warning "Could not configure Tailscale Serve"
+    fi
+
+    # Display access info
+    local ts_ip
+    ts_ip=$(tailscale ip -4 2>/dev/null || echo "")
+    if [[ -n "$ts_ip" ]]; then
+        echo ""
+        log_success "Services erreichbar ueber Tailscale:"
+        echo "  code-server: https://${ts_ip}/"
+        echo ""
+    fi
 }
 
 setup_environment() {
@@ -1403,6 +1576,13 @@ parse_arguments() {
                 COMPOSE_FILE="docker-compose.native-tailscale.yml"
                 shift
                 ;;
+            --native-userspace)
+                NATIVE_USERSPACE=true
+                USE_TAILSCALE=true
+                SKIP_TAILSCALE=false
+                COMPOSE_FILE="docker-compose.native-userspace.yml"
+                shift
+                ;;
             --skip-terminal)
                 SKIP_TERMINAL=true
                 shift
@@ -1504,9 +1684,16 @@ main() {
     # Tailscale setup (interactive choice or native mode)
     if [[ "$NATIVE_TAILSCALE" == "true" ]]; then
         setup_native_tailscale
+    elif [[ "$NATIVE_USERSPACE" == "true" ]]; then
+        install_native_tailscale_userspace
     else
         setup_tailscale_choice
-        install_tailscale
+        # After choice, check if native userspace was selected
+        if [[ "$NATIVE_USERSPACE" == "true" ]]; then
+            install_native_tailscale_userspace
+        else
+            install_tailscale
+        fi
     fi
 
     # Terminal tools
@@ -1538,6 +1725,11 @@ main() {
 
     if confirm "Start Docker services now?"; then
         start_services
+
+        # Setup Tailscale Serve for native userspace mode
+        if [[ "$NATIVE_USERSPACE" == "true" ]]; then
+            setup_tailscale_serve
+        fi
     fi
 
     # Health check
@@ -1556,6 +1748,21 @@ main() {
         ts_ip=$(tailscale ip -4 2>/dev/null || echo "")
         if [[ -n "$ts_ip" ]]; then
             show_access_qr "$ts_ip" "8443" "https"
+        fi
+    elif [[ "$NATIVE_USERSPACE" == "true" ]]; then
+        local ts_ip
+        ts_ip=$(tailscale ip -4 2>/dev/null || echo "")
+        if [[ -n "$ts_ip" ]]; then
+            echo -e "${BLUE}Native Tailscale Userspace Mode:${NC}"
+            echo "  code-server: https://${ts_ip}/"
+            echo ""
+            echo "  (Port 443 via Tailscale Serve)"
+            show_access_qr "$ts_ip" "" "https"
+        else
+            echo -e "${BLUE}After Tailscale connects:${NC}"
+            echo "  Run 'tailscale ip' to get your Tailscale IP"
+            echo "  code-server: https://<TAILSCALE-IP>/"
+            echo ""
         fi
     elif [[ "${USE_TAILSCALE:-true}" == "true" ]]; then
         echo -e "${BLUE}After Tailscale connects, access via:${NC}"

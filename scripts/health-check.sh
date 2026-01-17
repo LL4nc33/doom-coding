@@ -79,11 +79,26 @@ generate_qr() {
     fi
 }
 
+# Detect if native userspace mode is active
+is_native_userspace_mode() {
+    systemctl is-active tailscaled-userspace &>/dev/null
+}
+
 # Get access URL based on current configuration
 get_access_url() {
     local ip=""
     local port="8443"
     local protocol="https"
+
+    # Check for native userspace mode (uses port 443 via Tailscale Serve)
+    if is_native_userspace_mode; then
+        ip=$(tailscale ip -4 2>/dev/null || echo "")
+        if [[ -n "$ip" ]]; then
+            # Native userspace uses Tailscale Serve on port 443
+            echo "${protocol}://${ip}/"
+            return
+        fi
+    fi
 
     # Try to get Tailscale IP first
     if command -v tailscale &>/dev/null; then
@@ -211,6 +226,14 @@ check_containers() {
 }
 
 check_tailscale() {
+    # First check for native userspace mode (systemd service)
+    if systemctl is-active tailscaled-userspace &>/dev/null; then
+        local ip
+        ip=$(tailscale ip -4 2>/dev/null || echo "N/A")
+        log_pass "Tailscale (native userspace): Running ($ip)"
+        return 0
+    fi
+
     if command -v tailscale &>/dev/null; then
         local status
         status=$(tailscale status --json 2>/dev/null || echo "{}")
@@ -241,6 +264,26 @@ check_tailscale() {
             fi
         fi
         log_warn "Tailscale: Not installed on host"
+        return 0
+    fi
+}
+
+check_tailscale_serve() {
+    # Only check if native userspace mode is active
+    if ! is_native_userspace_mode; then
+        return 0
+    fi
+
+    # Check if tailscale serve is configured
+    local serve_status
+    serve_status=$(tailscale serve status 2>/dev/null || echo "")
+
+    if [[ -n "$serve_status" ]] && [[ "$serve_status" != *"No serve config"* ]]; then
+        log_pass "Tailscale Serve: Configured"
+        return 0
+    else
+        log_warn "Tailscale Serve: Not configured"
+        log_info "  Run: ./scripts/setup-tailscale-serve.sh setup"
         return 0
     fi
 }
@@ -481,6 +524,7 @@ main() {
     check_docker_compose
     check_containers
     check_tailscale
+    check_tailscale_serve
     check_code_server
     check_claude_code
     check_ssh_hardening

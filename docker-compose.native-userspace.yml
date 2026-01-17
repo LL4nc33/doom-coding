@@ -1,0 +1,115 @@
+# Doom Coding Docker Compose - Native LXC Tailscale Userspace Mode
+# Tailscale wird direkt auf dem LXC-Host installiert (nicht in Docker)
+# Services binden an localhost und werden via `tailscale serve` exponiert
+#
+# Vorteile:
+# - Kein Docker-Container fuer Tailscale (reduzierter Ressourcenverbrauch)
+# - Native Tailscale Userspace Networking direkt im LXC
+# - Services nur ueber Tailscale erreichbar (erhoehte Sicherheit)
+#
+# Voraussetzungen:
+# - Tailscale auf dem LXC-Host mit --tun=userspace-networking installiert
+# - tailscale serve konfiguriert fuer Port-Exposure
+
+services:
+  # code-server - VS Code in the browser
+  # Bindet nur an localhost - Zugriff via Tailscale Serve
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: doom-code-server
+    restart: unless-stopped
+    ports:
+      # Nur localhost-Binding fuer erhoehte Sicherheit
+      - "127.0.0.1:8443:8443"
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Berlin}
+      - PASSWORD=${CODE_SERVER_PASSWORD}
+      - SUDO_PASSWORD=${SUDO_PASSWORD}
+      - DEFAULT_WORKSPACE=/workspace
+    volumes:
+      - code-server-config:/config
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - ./config/zsh/.zshrc:/config/.zshrc:ro
+      - ./config/tmux/tmux.conf:/config/.tmux.conf:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.doom-coding.service=code-server"
+      - "com.doom-coding.mode=native-userspace"
+      - "com.doom-coding.color=#7C5E46"
+
+  # Claude Code Container
+  # Bindet nur an localhost - Zugriff via Tailscale Serve
+  claude:
+    build:
+      context: .
+      dockerfile: Dockerfile.claude
+      args:
+        - TARGETARCH=${TARGETARCH:-amd64}
+    container_name: doom-claude
+    restart: unless-stopped
+    ports:
+      # Nur localhost-Binding fuer erhoehte Sicherheit
+      - "127.0.0.1:7681:7681"
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Berlin}
+    secrets:
+      - anthropic_api_key
+    volumes:
+      - claude-config:/home/claude/.claude
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - ./config/zsh/.zshrc:/home/claude/.zshrc:ro
+      - ./config/tmux/tmux.conf:/home/claude/.tmux.conf:ro
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.doom-coding.service=claude"
+      - "com.doom-coding.mode=native-userspace"
+      - "com.doom-coding.color=#A47D5B"
+
+secrets:
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key.txt
+
+volumes:
+  code-server-config:
+    name: doom-code-server-config
+  claude-config:
+    name: doom-claude-config
+
+networks:
+  default:
+    name: doom-coding-network

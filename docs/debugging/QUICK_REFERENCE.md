@@ -590,4 +590,4 @@ go test -race ./...
 ---
 
 **Last Updated**: 2026-01-16
-**Version**: 0.0.6
+**Version**: 0.0.6a
