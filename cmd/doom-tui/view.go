@@ -12,6 +12,10 @@ func (m Model) View() string {
 	switch m.screen {
 	case ScreenWelcome:
 		return m.viewWelcome()
+	case ScreenSkillAssessment:
+		return m.viewSkillAssessment()
+	case ScreenUseCase:
+		return m.viewUseCase()
 	case ScreenDetection:
 		return m.viewDetection()
 	case ScreenDeploymentMode:
@@ -67,7 +71,7 @@ development environment with:
   • Secrets management with SOPS/age encryption
 `)
 
-	help := helpStyle.Render("[Enter] Continue  [h] Help  [q] Quit")
+	help := helpStyle.Render("[Enter] Start Setup  [s] Skip to Advanced  [h] Help  [q] Quit")
 
 	content := lipgloss.JoinVertical(lipgloss.Center,
 		bannerStyle.Render(banner),
@@ -80,6 +84,100 @@ development environment with:
 	)
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
+}
+
+func (m Model) viewSkillAssessment() string {
+	title := titleStyle.Render("Quick Setup Questions")
+	subtitle := subtitleStyle.Render(fmt.Sprintf("Question %d of %d", m.skillQuestionIdx+1, len(m.skillQuestions)))
+
+	q := m.skillQuestions[m.skillQuestionIdx]
+
+	// Progress indicator
+	progressDots := ""
+	for i := 0; i < len(m.skillQuestions); i++ {
+		if i < m.skillQuestionIdx {
+			progressDots += successStyle.Render("● ")
+		} else if i == m.skillQuestionIdx {
+			progressDots += selectedStyle.Render("○ ")
+		} else {
+			progressDots += disabledStyle.Render("○ ")
+		}
+	}
+
+	question := normalStyle.Render(q.Question)
+
+	var options strings.Builder
+	for i, opt := range q.Options {
+		cursor := "  "
+		style := normalStyle
+		if i == m.cursor {
+			cursor = selectedStyle.Render("▸ ")
+			style = selectedStyle
+		}
+		options.WriteString(fmt.Sprintf("%s%s\n", cursor, style.Render(opt)))
+	}
+
+	help := helpStyle.Render("[↑/↓] Navigate  [Enter] Select  [Esc] Back")
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		"",
+		title,
+		subtitle,
+		"",
+		progressDots,
+		"",
+		question,
+		"",
+		options.String(),
+		"",
+		help,
+	)
+}
+
+func (m Model) viewUseCase() string {
+	title := titleStyle.Render("What do you want to do?")
+
+	// Show skill level badge
+	var skillBadge string
+	switch m.skillLevel {
+	case SkillBeginner:
+		skillBadge = helpStyle.Render("Setup optimized for: Beginners")
+	case SkillIntermediate:
+		skillBadge = helpStyle.Render("Setup optimized for: Intermediate users")
+	case SkillAdvanced:
+		skillBadge = helpStyle.Render("Setup optimized for: Advanced users")
+	}
+
+	var options strings.Builder
+	for i, uc := range m.useCaseOptions {
+		cursor := "  "
+		style := normalStyle
+		if i == m.cursor {
+			cursor = selectedStyle.Render("▸ ")
+			style = selectedStyle
+		}
+
+		// Add recommendation for code-anywhere if mobile access was selected
+		recommended := ""
+		if m.skillAnswers[1] == 0 && uc.UseCase == UseCaseCodeAnywhere {
+			recommended = successStyle.Render(" (Recommended)")
+		}
+
+		options.WriteString(fmt.Sprintf("%s%s %s%s\n", cursor, uc.Icon, style.Render(uc.Name), recommended))
+		options.WriteString(fmt.Sprintf("     %s\n\n", disabledStyle.Render(uc.Description)))
+	}
+
+	help := helpStyle.Render("[↑/↓] Navigate  [Enter] Select  [Esc] Back")
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		"",
+		title,
+		skillBadge,
+		"",
+		options.String(),
+		"",
+		help,
+	)
 }
 
 func (m Model) viewDetection() string {
@@ -427,7 +525,7 @@ func (m Model) viewResults() string {
 	if m.installErr != nil {
 		title = errorStyle.Render("Installation Failed")
 	} else {
-		title = successStyle.Render("Installation Complete!")
+		title = successStyle.Render("🎉 Installation Complete!")
 	}
 
 	var content strings.Builder
@@ -438,6 +536,8 @@ func (m Model) viewResults() string {
 		content.WriteString("    • Check /var/log/doom-coding-install.log\n")
 		content.WriteString("    • Verify network connectivity\n")
 		content.WriteString("    • Ensure sufficient disk space\n")
+		content.WriteString("\n  Need help? Scan QR code for troubleshooting:\n")
+		content.WriteString("    Run: ./scripts/health-check.sh --qr\n")
 	} else {
 		content.WriteString("  Health Check Results:\n")
 		for name, healthy := range m.healthResults {
@@ -449,24 +549,37 @@ func (m Model) viewResults() string {
 		}
 
 		content.WriteString("\n  Access Information:\n")
+
+		// Generate access URL based on deployment mode
+		accessURL := ""
 		if m.deploymentMode == ModeDockerTailscale {
 			content.WriteString("    • code-server: https://<tailscale-ip>:8443\n")
 			content.WriteString("    • Run 'tailscale status' to get your IP\n")
+			content.WriteString("    • Then run: ./scripts/health-check.sh --qr\n")
 		} else if m.deploymentMode == ModeNativeTailscale {
 			content.WriteString("    • code-server: https://<host-tailscale-ip>:8443\n")
-			content.WriteString("    • Run 'tailscale ip' to get your host's Tailscale IP\n")
+			content.WriteString("    • Run 'tailscale ip' for your Tailscale IP\n")
+			content.WriteString("    • Then run: ./scripts/health-check.sh --qr\n")
 		} else if m.deploymentMode == ModeDockerLocal {
-			content.WriteString("    • code-server: https://localhost:8443\n")
+			accessURL = "https://localhost:8443"
+			content.WriteString(fmt.Sprintf("    • code-server: %s\n", accessURL))
 			content.WriteString("    • Or use your machine's local IP\n")
 		}
 
+		content.WriteString("\n  📱 Mobile Access:\n")
+		content.WriteString("    Run: ./scripts/health-check.sh --qr\n")
+		content.WriteString("    to display a QR code for easy mobile access\n")
+
 		content.WriteString("\n  Next Steps:\n")
-		content.WriteString("    • Open code-server in your browser\n")
-		content.WriteString("    • Connect to Claude Code container\n")
-		content.WriteString("    • Check documentation at docs/README.md\n")
+		content.WriteString("    1. Open code-server in your browser\n")
+		content.WriteString("    2. Start coding with Claude AI assistance\n")
+		content.WriteString("    3. Check docs/ for more information\n")
 	}
 
 	box := boxStyle.Render(content.String())
+
+	// Mobile-friendly tip
+	mobileTip := helpStyle.Render("💡 Tip: Run ./scripts/health-check.sh --qr for mobile QR code access")
 
 	help := helpStyle.Render("[Enter/q] Exit  [r] Re-run Health Check  [l] View Logs")
 
@@ -475,6 +588,8 @@ func (m Model) viewResults() string {
 		title,
 		"",
 		box,
+		"",
+		mobileTip,
 		"",
 		help,
 	)

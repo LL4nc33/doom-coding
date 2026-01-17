@@ -13,7 +13,7 @@ import (
 
 // Version information
 const (
-	Version = "0.0.4"
+	Version = "0.0.6"
 	AppName = "doom-tui"
 )
 

@@ -26,6 +26,7 @@ WARNINGS=0
 
 # Output format
 OUTPUT_FORMAT="human"  # human or json
+SHOW_QR=false
 
 # ===========================================
 # LOGGING
@@ -54,6 +55,76 @@ log_warn() {
 log_info() {
     if [[ "$OUTPUT_FORMAT" == "human" ]]; then
         echo -e "${BLUE}ℹ${NC}  $*"
+    fi
+}
+
+# ===========================================
+# QR CODE FUNCTIONS
+# ===========================================
+# Generate QR code for terminal display (requires qrencode)
+generate_qr() {
+    local url="$1"
+    local label="${2:-Scan to open}"
+
+    if command -v qrencode &>/dev/null; then
+        echo ""
+        qrencode -t ansiutf8 -m 2 "$url"
+        echo "    ${label} ↑"
+        echo ""
+    else
+        echo ""
+        echo "    QR: Install 'qrencode' to display QR code"
+        echo "    URL: $url"
+        echo ""
+    fi
+}
+
+# Get access URL based on current configuration
+get_access_url() {
+    local ip=""
+    local port="8443"
+    local protocol="https"
+
+    # Try to get Tailscale IP first
+    if command -v tailscale &>/dev/null; then
+        ip=$(tailscale ip -4 2>/dev/null || echo "")
+    fi
+
+    # Check for container Tailscale
+    if [[ -z "$ip" ]] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "doom-tailscale"; then
+        ip=$(docker exec doom-tailscale tailscale ip -4 2>/dev/null || echo "")
+    fi
+
+    # Fallback to local IP
+    if [[ -z "$ip" ]]; then
+        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+
+    if [[ -n "$ip" ]]; then
+        echo "${protocol}://${ip}:${port}"
+    else
+        echo ""
+    fi
+}
+
+# Show access QR code
+show_access_qr() {
+    local url
+    url=$(get_access_url)
+
+    if [[ -n "$url" ]]; then
+        echo ""
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}  Access your code-server on any device:${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        generate_qr "$url" "Scan to open code-server"
+        echo "    Desktop: $url"
+        echo ""
+    else
+        echo ""
+        echo -e "${YELLOW}Could not determine access URL${NC}"
+        echo "Run 'tailscale ip' or check your local network IP"
+        echo ""
     fi
 }
 
@@ -338,6 +409,20 @@ print_summary_human() {
     if [[ $FAILED -eq 0 ]]; then
         echo ""
         echo -e "${GREEN}🎉 All systems operational!${NC}"
+
+        # Show access QR code if requested or by default on success
+        if [[ "$SHOW_QR" == "true" ]]; then
+            show_access_qr
+        else
+            # Show compact access info
+            local url
+            url=$(get_access_url)
+            if [[ -n "$url" ]]; then
+                echo ""
+                echo -e "${BLUE}Access:${NC} $url"
+                echo -e "${BLUE}Tip:${NC} Run with --qr to show QR code for mobile access"
+            fi
+        fi
     else
         echo ""
         echo -e "${RED}⚠ Some checks failed. Review the output above.${NC}"
@@ -366,11 +451,16 @@ main() {
                 OUTPUT_FORMAT="json"
                 shift
                 ;;
+            --qr)
+                SHOW_QR=true
+                shift
+                ;;
             --help|-h)
-                echo "Usage: $0 [--json]"
+                echo "Usage: $0 [--json] [--qr]"
                 echo ""
                 echo "Options:"
                 echo "  --json    Output in JSON format"
+                echo "  --qr      Show access QR code after health check"
                 echo "  --help    Show this help"
                 exit 0
                 ;;

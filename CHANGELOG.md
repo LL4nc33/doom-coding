@@ -8,12 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Native-Tailscale Mode**: New deployment option using existing host Tailscale installation (no additional containers)
-- **docker-compose.native-tailscale.yml**: New compose file that exposes container ports directly to host network
-- **Host Network Integration**: Leverages existing Tailscale installation on the host without additional VPN containers
-- **Direct Port Exposure**: Container ports are exposed directly to the host's Tailscale network interface
-- **Zero TUN Device Requirements**: Works without TUN device by using host Tailscale networking stack
-- **Enhanced Host Detection**: Improved installer logic to detect running Tailscale on host and recommend Native-Tailscale mode
+- Placeholder for future changes
+
+### Changed
+- Placeholder for future changes
+
+### Fixed
+- Placeholder for future changes
+
+## [0.0.6] - 2025-01-17
+
+### Added
+- **QR Code Generation**: Native Go library for generating QR codes to access development environment from mobile devices
+- **Mobile/Smartphone Setup Guide**: Comprehensive documentation for accessing Doom Coding from phones and tablets
+- **Smart Port Conflict Detection**: Intelligent service management that detects and handles port conflicts during installation
+- **QR Integration Testing**: Comprehensive test framework for QR code functionality with `test-qr-integration.sh`
+- **Go Modules Support**: Full Go workspace setup with proper dependency management (`go.mod`, `go.sum`)
+- **Enhanced TUI Interface**: Improved Terminal User Interface with updated model and view components
+- **Native Tailscale Enhancements**: Advanced deployment option using existing host Tailscale installation
+- **LXC Tailscale Userspace Mode**: Enhanced support for LXC containers without TUN device requirements
 - Complete documentation coverage for all referenced files
 - Advanced topics documentation with performance and monitoring guides
 - Contributing guidelines with code style standards
@@ -24,13 +37,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Installation Experience**: Installer now offers three deployment modes with intelligent environment detection
 - **Host Tailscale Detection**: Installation script automatically detects running Tailscale on host and recommends Native-Tailscale Mode
 - **Interactive Input Handling**: Fixed curl|bash compatibility by using /dev/tty for user prompts in LXC environments
+- **Service Management**: Enhanced health-check script with QR code generation capabilities (`--qr` flag)
+- **TUI Components**: Updated Terminal User Interface model and view logic for better user experience
 - Enhanced README with comprehensive deployment options and CLI reference
 - Updated SSH hardening configuration to remove deprecated options
 - Improved installer help text with complete CLI option documentation
 
 ### Fixed
+- **Dependency Management**: Resolved Go package version conflicts with proper module versioning
+- **CI/CD Pipeline**: Fixed GitHub Actions workflow failures and improved linting configuration
+- **Package Compatibility**: Upgraded charmbracelet packages to compatible versions for TUI components
 - Removed deprecated `UsePrivilegeSeparation` from SSH configuration
 - Fixed missing documentation files referenced in guides
+
+### Technical Details
+
+#### New QR Code Features
+- **Native Go Implementation**: Uses `github.com/skip2/go-qrcode` library for terminal-based QR generation
+- **Mobile Integration**: QR codes provide direct access links for smartphone browsers
+- **Health Check Integration**: `./scripts/health-check.sh --qr` displays access QR code
+- **Cross-Platform Support**: Works on all supported Linux distributions
+
+#### Go Module Structure
+```go
+module github.com/doom-coding/doom-coding
+go 1.22
+require github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+```
+
+#### Testing Framework Enhancements
+- **QR Integration Tests**: Automated testing for QR code generation and validation
+- **Service Management Tests**: Port conflict detection and resolution testing
+- **Cross-Platform Validation**: Enhanced testing across different environments
 
 ## [1.0.0] - 2025-01-16
 

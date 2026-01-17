@@ -34,7 +34,7 @@ else
     fi
 fi
 readonly LOG_FILE="${LOG_FILE:-/var/log/doom-coding-install.log}"
-readonly INSTALLER_VERSION="0.0.4"
+readonly INSTALLER_VERSION="0.0.6"
 
 # Default options
 UNATTENDED=false
@@ -127,6 +127,125 @@ log_error() {
 log_step() {
     log "STEP" "$*"
     echo -e "${BROWN}⏳${NC} $*"
+}
+
+# ===========================================
+# QR CODE HELPER FUNCTIONS
+# ===========================================
+# Generate QR code for terminal display (requires qrencode)
+generate_qr() {
+    local url="$1"
+    local label="${2:-Scan to open}"
+
+    if command -v qrencode &>/dev/null; then
+        echo ""
+        qrencode -t ansiutf8 -m 2 "$url"
+        echo "    ${label} ↑"
+        echo ""
+    else
+        log_info "QR code display requires qrencode (install with: apt install qrencode)"
+        echo "    URL: $url"
+        echo ""
+    fi
+}
+
+# Show access QR code after successful installation
+show_access_qr() {
+    local ip="$1"
+    local port="${2:-8443}"
+    local protocol="${3:-https}"
+    local url="${protocol}://${ip}:${port}"
+
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}  Access your code-server on any device:${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    generate_qr "$url" "Scan to open code-server"
+    echo "    Desktop: $url"
+    echo ""
+}
+
+# Show QR code linking to external service for credentials
+show_service_qr() {
+    local service="$1"
+    local url=""
+    local label=""
+
+    case "$service" in
+        tailscale)
+            url="https://login.tailscale.com/admin/settings/keys"
+            label="Scan to create Tailscale auth key"
+            ;;
+        anthropic)
+            url="https://console.anthropic.com/account/keys"
+            label="Scan to get Anthropic API key"
+            ;;
+        github)
+            url="https://github.com/doom-coding/doom-coding"
+            label="Scan to view project on GitHub"
+            ;;
+        termux)
+            url="https://play.google.com/store/apps/details?id=com.termux"
+            label="Scan to install Termux (Android)"
+            ;;
+        blink)
+            url="https://apps.apple.com/app/blink-shell-mosh-ssh-client/id1594898306"
+            label="Scan to install Blink Shell (iOS)"
+            ;;
+        *)
+            log_warning "Unknown service: $service"
+            return 1
+            ;;
+    esac
+
+    generate_qr "$url" "$label"
+}
+
+# Show troubleshooting QR code for specific error
+show_troubleshoot_qr() {
+    local error_code="$1"
+    local url="https://doom-coding.dev/troubleshoot/${error_code}"
+
+    echo ""
+    echo -e "${YELLOW}Need help? Scan for troubleshooting guide:${NC}"
+    generate_qr "$url" "Scan for detailed help"
+}
+
+# Handle port conflict with QR-enhanced error message
+handle_port_conflict_with_qr() {
+    local port="$1"
+    local process="${2:-unknown}"
+
+    echo ""
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    log_error "Port $port is already in use"
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "This usually means another web server is running."
+    echo "Process using port: $process"
+    echo ""
+    echo "Options:"
+    echo "  1) Stop the conflicting service manually"
+    echo "  2) Use --force to automatically stop doom-coding containers"
+    echo "  3) Choose a different port"
+    echo ""
+    show_troubleshoot_qr "port-${port}"
+}
+
+# Show mobile setup guide QR
+show_mobile_setup_qr() {
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Mobile Setup Guide${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Recommended mobile apps:"
+    echo ""
+    echo "Android:"
+    show_service_qr "termux"
+    echo ""
+    echo "iOS:"
+    show_service_qr "blink"
 }
 
 # ===========================================
@@ -698,6 +817,7 @@ install_base_packages() {
         ca-certificates
         gnupg
         lsb-release
+        qrencode
     )
 
     if [[ "$PKG_MANAGER" == "apt" ]]; then
@@ -1429,12 +1549,41 @@ main() {
     echo ""
     log_success "Installation completed!"
     echo ""
+
+    # Show access QR code based on deployment mode
+    if [[ "$NATIVE_TAILSCALE" == "true" ]]; then
+        local ts_ip
+        ts_ip=$(tailscale ip -4 2>/dev/null || echo "")
+        if [[ -n "$ts_ip" ]]; then
+            show_access_qr "$ts_ip" "8443" "https"
+        fi
+    elif [[ "${USE_TAILSCALE:-true}" == "true" ]]; then
+        echo -e "${BLUE}After Tailscale connects, access via:${NC}"
+        echo "  https://<TAILSCALE-IP>:8443"
+        echo ""
+        echo "  Run 'tailscale ip' to get your Tailscale IP"
+        echo ""
+    else
+        local host_ip
+        host_ip=$(hostname -I | awk '{print $1}')
+        if [[ -n "$host_ip" ]]; then
+            show_access_qr "$host_ip" "8443" "https"
+        fi
+    fi
+
     echo -e "${GREEN}Next steps:${NC}"
     echo "  1. Edit .env with your configuration"
     echo "  2. Update secrets/anthropic_api_key.txt"
     echo "  3. Run: docker compose up -d"
     echo "  4. Check status: ./scripts/health-check.sh"
     echo ""
+
+    # Offer mobile setup guide
+    if [[ "$UNATTENDED" != "true" ]]; then
+        if confirm "Show mobile setup guide with QR codes?" "n"; then
+            show_mobile_setup_qr
+        fi
+    fi
 }
 
 main "$@"

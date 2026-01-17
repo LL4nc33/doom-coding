@@ -1,6 +1,8 @@
 # 🌲 Doom Coding
 
 > A remote development environment with Tailscale networking, code-server, and Claude Code integration.
+>
+> **Version 0.0.6** - Now with QR code generation for instant mobile access!
 
 <p align="center">
   <img src="logo/favicon.png" width="128" height="128" alt="Doom Coding Logo">
@@ -23,6 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/LL4nc33/doom-coding/main/scripts/in
 **What you get:**
 - 🔒 **Secure Access**: Tailscale mesh VPN with zero-config networking
 - 💻 **Web IDE**: Full VS Code experience in your browser
+- 📱 **Mobile Ready**: QR code generation for instant smartphone access
 - 🤖 **AI Integration**: Claude Code for intelligent assistance
 - 🛠️ **Complete Toolchain**: zsh, tmux, Node.js, Python, and more
 - 🔐 **Hardened Security**: SSH hardening, encrypted secrets, container isolation
@@ -32,9 +35,12 @@ curl -fsSL https://raw.githubusercontent.com/LL4nc33/doom-coding/main/scripts/in
 | Feature | Description |
 |---------|-------------|
 | **One-Click Install** | Automated setup for Ubuntu, Debian, and Arch Linux |
+| **QR Code Integration** | Generate QR codes for instant mobile access |
 | **Tailscale Integration** | Secure mesh networking without port forwarding |
 | **code-server** | Full VS Code experience accessible from anywhere |
+| **Mobile-First Design** | Optimized for smartphone and tablet development |
 | **Claude Code** | AI-powered development assistance |
+| **Smart Port Detection** | Automatic port conflict detection and resolution |
 | **Terminal Tools** | Pre-configured zsh, tmux, and development tools |
 | **Terminal Environment** | Lightweight ttyd-based alternative (~200MB RAM) |
 | **Secrets Management** | SOPS/age encryption for sensitive configuration |
@@ -190,6 +196,28 @@ docker compose -f docker-compose.lxc-tailscale.yml up -d
 docker compose -f docker-compose.lxc.yml up -d
 ```
 
+## 📱 Mobile Access & QR Codes
+
+Get instant access to your development environment from any smartphone or tablet:
+
+**Quick Mobile Setup:**
+```bash
+# Generate QR code for immediate access
+./scripts/health-check.sh --qr
+```
+
+**What you get:**
+- 📱 **Instant Access**: Scan QR code with your phone's camera
+- 🔗 **Direct Links**: code-server, documentation, and service setup
+- 📚 **Mobile Guide**: Complete smartphone setup documentation
+- 🛠️ **Cross-Platform**: Works on Android and iOS devices
+
+**Popular Mobile Apps:**
+- **Android**: Termux, JuiceSSH for terminal access
+- **iOS**: Blink Shell, Termius for SSH connections
+
+**Complete mobile setup guide**: [`docs/mobile/smartphone-setup.md`](/config/repos/doom-coding/docs/mobile/smartphone-setup.md)
+
 **Access Your Environment:**
 
 *With Tailscale:*
@@ -207,6 +235,7 @@ docker compose -f docker-compose.lxc.yml up -d
 Complete documentation is available in the [`docs/`](docs/) directory:
 
 - **[Quick Start Guide](docs/installation/quick-start.md)** - Get running in 5 minutes
+- **[Mobile Setup Guide](docs/mobile/smartphone-setup.md)** - Complete smartphone and tablet setup
 - **[Installation Guide](docs/installation/)** - Detailed setup procedures
 - **[Testing Framework](docs/testing/)** - Comprehensive 70-iteration testing strategy
 - **[Configuration Reference](docs/configuration/)** - All configuration options
@@ -222,8 +251,11 @@ We've implemented a rigorous testing strategy covering 5 deployment scenarios ac
 
 ### Quick Testing Commands
 ```bash
-# Basic health check
-./scripts/health-check.sh
+# Basic health check with QR code
+./scripts/health-check.sh --qr
+
+# Test QR code integration
+./scripts/test-qr-integration.sh
 
 # Run security tests
 ./scripts/test-runner.sh --category=security
@@ -271,10 +303,14 @@ vim .env
 
 ## 🏥 Health Monitoring
 
-Monitor your environment health:
+Monitor your environment health and generate access QR codes:
 
 ```bash
+# Standard health check
 ./scripts/health-check.sh
+
+# Health check with QR code for mobile access
+./scripts/health-check.sh --qr
 ```
 
 Expected output:
@@ -330,6 +366,7 @@ Choose your license:
 - [Tailscale](https://tailscale.com) - Secure networking
 - [code-server](https://github.com/coder/code-server) - VS Code in the browser
 - [Claude Code](https://claude.ai/claude-code) - AI development assistance
+- [go-qrcode](https://github.com/skip2/go-qrcode) - QR code generation library
 - [LinuxServer.io](https://www.linuxserver.io/) - Quality container images
 
 ## 🤖 AI Development

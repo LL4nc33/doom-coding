@@ -20,6 +20,8 @@ type Screen int
 
 const (
 	ScreenWelcome Screen = iota
+	ScreenSkillAssessment
+	ScreenUseCase
 	ScreenDetection
 	ScreenDeploymentMode
 	ScreenComponents
@@ -27,6 +29,25 @@ const (
 	ScreenPreview
 	ScreenProgress
 	ScreenResults
+)
+
+// SkillLevel represents user's technical expertise
+type SkillLevel int
+
+const (
+	SkillBeginner SkillLevel = iota
+	SkillIntermediate
+	SkillAdvanced
+)
+
+// UseCase represents a predefined installation scenario
+type UseCase int
+
+const (
+	UseCaseCodeAnywhere UseCase = iota
+	UseCaseHomeLab
+	UseCaseAITerminal
+	UseCaseCustom
 )
 
 // DeploymentMode options
@@ -71,12 +92,37 @@ type Configuration struct {
 	PGID           string
 }
 
+// SkillQuestion represents a skill assessment question
+type SkillQuestion struct {
+	Question string
+	Options  []string
+	Answer   int // 0 = beginner answer, 1 = intermediate, 2 = advanced
+}
+
+// UseCaseOption represents a use case option
+type UseCaseOption struct {
+	Name        string
+	Icon        string
+	Description string
+	UseCase     UseCase
+}
+
 // Model is the main application state
 type Model struct {
 	projectRoot   string
 	screen        Screen
 	width         int
 	height        int
+
+	// Skill assessment
+	skillLevel      SkillLevel
+	skillQuestions  []SkillQuestion
+	skillAnswers    []int
+	skillQuestionIdx int
+
+	// Use case selection
+	selectedUseCase UseCase
+	useCaseOptions  []UseCaseOption
 
 	// System detection
 	systemInfo    SystemInfo
@@ -104,6 +150,7 @@ type Model struct {
 	// Results
 	healthResults  map[string]bool
 	accessInfo     []string
+	accessURL      string // For QR code generation
 }
 
 // Brand colors
@@ -215,6 +262,49 @@ func NewModel(projectRoot string) Model {
 		progress:       p,
 		inputs:         inputs,
 		deploymentMode: ModeDockerTailscale,
+		// Skill assessment questions
+		skillQuestions: []SkillQuestion{
+			{
+				Question: "How comfortable are you with Docker and containers?",
+				Options:  []string{"Never used them", "Some experience", "Very comfortable"},
+			},
+			{
+				Question: "Do you want to access this from mobile devices?",
+				Options:  []string{"Yes, definitely", "Maybe later", "No, desktop only"},
+			},
+			{
+				Question: "Preferred setup style?",
+				Options:  []string{"Quick & simple", "Guided with explanations", "Full control"},
+			},
+		},
+		skillAnswers: make([]int, 3),
+		// Use case options
+		useCaseOptions: []UseCaseOption{
+			{
+				Name:        "Code Anywhere",
+				Icon:        "🌐",
+				Description: "Access VS Code from phone, laptop, anywhere with VPN",
+				UseCase:     UseCaseCodeAnywhere,
+			},
+			{
+				Name:        "Home Lab",
+				Icon:        "🏠",
+				Description: "VS Code accessible from devices on your network",
+				UseCase:     UseCaseHomeLab,
+			},
+			{
+				Name:        "AI Terminal",
+				Icon:        "🤖",
+				Description: "Lightweight setup with Claude AI assistance",
+				UseCase:     UseCaseAITerminal,
+			},
+			{
+				Name:        "Custom Setup",
+				Icon:        "⚙️",
+				Description: "Full control over all configuration options",
+				UseCase:     UseCaseCustom,
+			},
+		},
 		components: []Component{
 			{Name: "Docker", Description: "Container runtime for services", Selected: true, Enabled: true},
 			{Name: "Tailscale", Description: "Secure VPN access", Selected: true, Enabled: true},
@@ -337,6 +427,10 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case ScreenWelcome:
 		return m.handleWelcomeKeys(msg)
+	case ScreenSkillAssessment:
+		return m.handleSkillAssessmentKeys(msg)
+	case ScreenUseCase:
+		return m.handleUseCaseKeys(msg)
 	case ScreenDetection:
 		return m.handleDetectionKeys(msg)
 	case ScreenDeploymentMode:
@@ -359,6 +453,13 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleWelcomeKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter", " ":
+		m.screen = ScreenSkillAssessment
+		m.skillQuestionIdx = 0
+		m.cursor = 0
+		return m, nil
+	case "s":
+		// Skip to advanced setup (direct to detection)
+		m.skillLevel = SkillAdvanced
 		m.screen = ScreenDetection
 		m.detecting = true
 		return m, tea.Batch(m.spinner.Tick, m.detectSystem())
@@ -369,12 +470,132 @@ func (m Model) handleWelcomeKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleSkillAssessmentKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j":
+		q := m.skillQuestions[m.skillQuestionIdx]
+		if m.cursor < len(q.Options)-1 {
+			m.cursor++
+		}
+	case "enter", " ":
+		// Save answer
+		m.skillAnswers[m.skillQuestionIdx] = m.cursor
+
+		// Move to next question or calculate skill level
+		if m.skillQuestionIdx < len(m.skillQuestions)-1 {
+			m.skillQuestionIdx++
+			m.cursor = 0
+		} else {
+			// Calculate skill level based on answers
+			m.calculateSkillLevel()
+			// Move to use case selection
+			m.screen = ScreenUseCase
+			m.cursor = 0
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) calculateSkillLevel() {
+	// Simple scoring: sum of answers (0=beginner, 1=intermediate, 2=advanced)
+	total := 0
+	for _, answer := range m.skillAnswers {
+		total += answer
+	}
+
+	// Classify based on total score
+	switch {
+	case total <= 2:
+		m.skillLevel = SkillBeginner
+	case total <= 4:
+		m.skillLevel = SkillIntermediate
+	default:
+		m.skillLevel = SkillAdvanced
+	}
+}
+
+func (m Model) handleUseCaseKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j":
+		if m.cursor < len(m.useCaseOptions)-1 {
+			m.cursor++
+		}
+	case "enter", " ":
+		m.selectedUseCase = m.useCaseOptions[m.cursor].UseCase
+		m.applyUseCase()
+
+		// For custom setup, go through all screens
+		// For predefined use cases, skip to detection with smart defaults
+		if m.selectedUseCase == UseCaseCustom {
+			m.screen = ScreenDetection
+			m.detecting = true
+			return m, tea.Batch(m.spinner.Tick, m.detectSystem())
+		}
+
+		// Predefined use case - detect system and skip some screens
+		m.screen = ScreenDetection
+		m.detecting = true
+		return m, tea.Batch(m.spinner.Tick, m.detectSystem())
+	}
+	return m, nil
+}
+
+func (m *Model) applyUseCase() {
+	switch m.selectedUseCase {
+	case UseCaseCodeAnywhere:
+		// Full deployment with Tailscale VPN
+		m.deploymentMode = ModeDockerTailscale
+		m.components[0].Selected = true // Docker
+		m.components[1].Selected = true // Tailscale
+		m.components[2].Selected = true // Terminal Tools
+		m.components[3].Selected = true // SSH Hardening
+		m.components[4].Selected = true // Secrets
+
+	case UseCaseHomeLab:
+		// Local network only
+		m.deploymentMode = ModeDockerLocal
+		m.components[0].Selected = true  // Docker
+		m.components[1].Selected = false // Tailscale
+		m.components[2].Selected = true  // Terminal Tools
+		m.components[3].Selected = true  // SSH Hardening
+		m.components[4].Selected = false // Secrets (optional for home lab)
+
+	case UseCaseAITerminal:
+		// Minimal with Claude focus
+		m.deploymentMode = ModeTerminalOnly
+		m.components[0].Selected = false // Docker
+		m.components[1].Selected = false // Tailscale
+		m.components[2].Selected = true  // Terminal Tools
+		m.components[3].Selected = false // SSH Hardening
+		m.components[4].Selected = false // Secrets
+
+	case UseCaseCustom:
+		// Keep defaults, user will customize
+	}
+}
+
 func (m Model) handleDetectionKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.detecting {
 		return m, nil
 	}
 	switch msg.String() {
 	case "enter", " ":
+		// For predefined use cases with beginners, skip directly to config
+		if m.selectedUseCase != UseCaseCustom && m.skillLevel == SkillBeginner {
+			m.screen = ScreenConfiguration
+			m.cursor = 0
+			m.focusIndex = 0
+			m.inputs[0].Focus()
+			return m, nil
+		}
 		m.screen = ScreenDeploymentMode
 		m.updateComponentsForMode()
 		return m, nil

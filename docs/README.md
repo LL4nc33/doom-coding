@@ -13,6 +13,7 @@ Welcome to the comprehensive documentation for the Doom Coding remote developmen
 | **[Security](security/)** | Security features, hardening, and best practices |
 | **[Terminal](terminal/)** | Terminal tools setup and customization |
 | **[Troubleshooting](troubleshooting/)** | Common issues and their solutions |
+| **[Mobile](mobile/)** | Mobile device access and smartphone setup guides |
 | **[Advanced](advanced/)** | Advanced usage patterns and customizations |
 | **[API Reference](api/)** | Script functions and configuration references |
 | **[Contributing](contributing/)** | How to contribute to the project |
@@ -40,6 +41,7 @@ Welcome to the comprehensive documentation for the Doom Coding remote developmen
 |------|---------------|
 | Install on new server | [Installation Guide](installation/installation-guide.md) |
 | Configure Tailscale | [Tailscale Setup](configuration/tailscale.md) |
+| Setup mobile access | [Mobile Setup](mobile/smartphone-setup.md) |
 | Setup secrets | [Secrets Management](security/secrets-management.md) |
 | Terminal customization | [Terminal Configuration](terminal/customization.md) |
 | Backup configuration | [Backup Guide](advanced/backup-recovery.md) |
