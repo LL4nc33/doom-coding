@@ -75,6 +75,17 @@ cleanup_on_error() {
 trap cleanup_on_error ERR INT TERM
 
 # ===========================================
+# SOURCE SERVICE MANAGEMENT LIBRARY
+# ===========================================
+# Load the service management functions if available
+if [[ -f "${SCRIPT_DIR}/lib/service-manager.sh" ]]; then
+    source "${SCRIPT_DIR}/lib/service-manager.sh"
+    SERVICE_MANAGER_LOADED=true
+else
+    SERVICE_MANAGER_LOADED=false
+fi
+
+# ===========================================
 # LOGGING FUNCTIONS
 # ===========================================
 setup_logging() {
@@ -212,21 +223,27 @@ OPTIONS:
     --code-password=PWD code-server password for unattended setup
     --anthropic-key=KEY Anthropic API key for Claude Code
     --dry-run           Show what would be done without executing
-    --force             Force reinstallation of all components
+    --force             Force reinstallation, remove conflicting containers
     --verbose           Enable verbose output
     --retry-failed      Retry previously failed installation steps
     --help, -h          Show this help message
     --version, -v       Show version information
 
+CONFLICT RESOLUTION:
+    The installer automatically detects port conflicts (8443, 7681) and
+    existing doom-coding installations. In interactive mode, you can choose
+    to stop/remove conflicting containers. Use --force for automatic cleanup.
+
 EXAMPLES:
     $0                              Interactive installation
     $0 --unattended                 Fully automated installation
+    $0 --force                      Remove conflicts automatically
     $0 --skip-tailscale             LXC without TUN device
     $0 --native-tailscale           Use host's existing Tailscale
-    $0 --unattended \\
+    $0 --unattended --force \\
       --tailscale-key="tskey-auth-xxx" \\
       --code-password="secure-password" \\
-      --anthropic-key="sk-ant-xxx"      Fully automated with credentials
+      --anthropic-key="sk-ant-xxx"      Fully automated with conflict cleanup
     $0 --skip-docker --skip-terminal  Minimal installation
     $0 --env-file=production.env    Use custom environment file
 
@@ -362,6 +379,198 @@ preflight_check() {
 
     log_success "All pre-flight checks passed"
     return 0
+}
+
+# Check for port conflicts and existing containers
+check_port_conflicts() {
+    log_step "Checking for port conflicts and existing installations..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY RUN] Would check for port conflicts"
+        return 0
+    fi
+
+    # Skip port checks if Docker is not installed yet
+    if ! command -v docker &>/dev/null; then
+        log_info "Docker not installed yet, skipping port conflict check"
+        return 0
+    fi
+
+    local conflicts_found=0
+    local ports_to_check=()
+
+    # Determine which ports will be used based on compose file
+    # All non-sidecar compose files expose ports 8443 and 7681
+    if [[ "$COMPOSE_FILE" == "docker-compose.lxc.yml" ]] || \
+       [[ "$COMPOSE_FILE" == "docker-compose.native-tailscale.yml" ]] || \
+       [[ "$COMPOSE_FILE" == "docker-compose.lxc-tailscale.yml" ]]; then
+        ports_to_check=(8443 7681)
+    else
+        # docker-compose.yml uses sidecar pattern, no exposed ports
+        log_info "Using sidecar network mode, no port exposure needed"
+    fi
+
+    # Check for port conflicts
+    for port in "${ports_to_check[@]}"; do
+        if docker ps --format '{{.Names}}\t{{.Ports}}' | grep -q ":${port}->"; then
+            local conflicting_container
+            conflicting_container=$(docker ps --format '{{.Names}}\t{{.Ports}}' | grep ":${port}->" | awk '{print $1}')
+            log_warning "Port ${port} already in use by container: ${conflicting_container}"
+            conflicts_found=1
+        fi
+    done
+
+    # Check for existing doom-coding containers
+    local existing_doom_containers
+    existing_doom_containers=$(docker ps -a --filter "name=doom-" --format '{{.Names}}\t{{.Status}}' 2>/dev/null || true)
+
+    if [[ -n "$existing_doom_containers" ]]; then
+        log_warning "Found existing doom-coding containers:"
+        echo "$existing_doom_containers" | while read -r line; do
+            log_info "  $line"
+        done
+        conflicts_found=1
+    fi
+
+    # If conflicts found, offer resolution options
+    if [[ $conflicts_found -eq 1 ]]; then
+        echo ""
+        log_warning "Installation conflicts detected!"
+        echo ""
+
+        if [[ "$FORCE" == "true" ]]; then
+            log_info "Force mode enabled, will attempt cleanup..."
+            cleanup_existing_installation
+            return 0
+        fi
+
+        if [[ "$UNATTENDED" == "true" ]]; then
+            log_error "Cannot proceed in unattended mode with conflicts"
+            log_error "Use --force to automatically remove conflicting containers"
+            return 1
+        fi
+
+        echo -e "${YELLOW}Options:${NC}"
+        echo "  1) Stop and remove conflicting doom-coding containers"
+        echo "  2) Stop and remove ALL containers using ports 8443/7681"
+        echo "  3) Show detailed conflict information"
+        echo "  4) Abort installation"
+        echo ""
+
+        local choice
+        read -rp "Select option [1/2/3/4] (default: 1): " choice < /dev/tty
+        choice="${choice:-1}"
+
+        case "$choice" in
+            1)
+                cleanup_existing_installation
+                return 0
+                ;;
+            2)
+                cleanup_port_conflicts "${ports_to_check[@]}"
+                return 0
+                ;;
+            3)
+                show_conflict_details "${ports_to_check[@]}"
+                # Ask again after showing details
+                if confirm "Proceed with cleanup of doom-coding containers?" "y"; then
+                    cleanup_existing_installation
+                    return 0
+                else
+                    log_error "Installation aborted by user"
+                    exit 0
+                fi
+                ;;
+            4)
+                log_info "Installation aborted by user"
+                exit 0
+                ;;
+            *)
+                log_error "Invalid selection"
+                exit 1
+                ;;
+        esac
+    fi
+
+    log_success "No port conflicts detected"
+    return 0
+}
+
+# Cleanup existing doom-coding installation
+cleanup_existing_installation() {
+    log_step "Cleaning up existing doom-coding containers..."
+
+    # Find all doom-* containers
+    local doom_containers
+    doom_containers=$(docker ps -aq --filter "name=doom-" 2>/dev/null || true)
+
+    if [[ -n "$doom_containers" ]]; then
+        log_info "Stopping doom-coding containers..."
+        docker stop $doom_containers 2>/dev/null || true
+
+        log_info "Removing doom-coding containers..."
+        docker rm $doom_containers 2>/dev/null || true
+
+        log_success "Existing doom-coding containers removed"
+    else
+        log_info "No doom-coding containers to remove"
+    fi
+}
+
+# Cleanup all containers using specific ports
+cleanup_port_conflicts() {
+    local ports=("$@")
+    log_step "Cleaning up containers using ports: ${ports[*]}"
+
+    for port in "${ports[@]}"; do
+        local containers
+        containers=$(docker ps --format '{{.Names}}' | while read -r name; do
+            if docker ps --format '{{.Names}}\t{{.Ports}}' | grep "^${name}" | grep -q ":${port}->"; then
+                echo "$name"
+            fi
+        done)
+
+        if [[ -n "$containers" ]]; then
+            log_info "Stopping containers using port ${port}..."
+            echo "$containers" | xargs docker stop 2>/dev/null || true
+
+            log_info "Removing containers that used port ${port}..."
+            echo "$containers" | xargs docker rm 2>/dev/null || true
+        fi
+    done
+
+    log_success "Port conflicts resolved"
+}
+
+# Show detailed conflict information
+show_conflict_details() {
+    local ports=("$@")
+    echo ""
+    log_info "=== Detailed Conflict Information ==="
+    echo ""
+
+    # Show all doom-* containers
+    echo -e "${BLUE}Doom-coding containers:${NC}"
+    docker ps -a --filter "name=doom-" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  None found"
+    echo ""
+
+    # Show port usage
+    for port in "${ports[@]}"; do
+        echo -e "${BLUE}Port ${port} usage:${NC}"
+        docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}' | grep ":${port}->" || echo "  Not in use"
+        echo ""
+    done
+
+    # Show process listening on ports
+    echo -e "${BLUE}System port listeners:${NC}"
+    for port in "${ports[@]}"; do
+        if command -v ss &>/dev/null; then
+            ss -tlnp 2>/dev/null | grep ":${port}" || echo "  Port ${port}: not in use"
+        elif command -v netstat &>/dev/null; then
+            netstat -tlnp 2>/dev/null | grep ":${port}" || echo "  Port ${port}: not in use"
+        fi
+    done
+    echo ""
 }
 
 # ===========================================
@@ -892,28 +1101,158 @@ start_services() {
     # Validate compose file
     docker compose -f "$COMPOSE_FILE" config > /dev/null
 
-    # Build and start
-    docker compose -f "$COMPOSE_FILE" build
-    docker compose -f "$COMPOSE_FILE" up -d
+    # Service detection and conflict resolution
+    if [[ "$SERVICE_MANAGER_LOADED" == "true" ]]; then
+        log_step "Detecting existing services..."
 
-    log_success "Services started"
+        # Show service summary
+        show_service_summary
 
-    # Show access info
-    echo ""
-    if [[ "$NATIVE_TAILSCALE" == "true" ]]; then
-        local ts_ip
-        ts_ip=$(tailscale ip -4 2>/dev/null || echo "<TAILSCALE-IP>")
-        log_info "Zugriff via Host-Tailscale:"
-        echo "  code-server: https://${ts_ip}:8443"
-        echo "  Tipp: 'tailscale ip' zeigt die Tailscale IP"
-    elif [[ "${USE_TAILSCALE:-true}" == "true" ]]; then
-        log_info "Zugriff via Tailscale IP (nach 'tailscale up'):"
-        echo "  code-server: https://<TAILSCALE-IP>:8443"
+        # Check for existing doom installation
+        if has_existing_installation; then
+            log_info "Existing doom-coding installation detected"
+
+            if [[ "$FORCE" == "true" ]]; then
+                log_info "Force mode: stopping and removing existing installation..."
+                backup_existing_config || log_warning "Backup failed, continuing anyway"
+                stop_doom_services 30 "$COMPOSE_FILE" 2>/dev/null || true
+                docker rm -f doom-tailscale doom-code-server doom-claude 2>/dev/null || true
+            else
+                log_info "Upgrading existing installation..."
+                backup_existing_config || log_warning "Backup failed, continuing anyway"
+                stop_doom_services 30 "$COMPOSE_FILE" 2>/dev/null || true
+            fi
+        fi
+
+        # Check for port conflicts (non-doom services)
+        local conflicts
+        conflicts=$(check_port_conflicts 2>/dev/null || echo "[]")
+        if [[ "$conflicts" != "[]" ]] && [[ -n "$conflicts" ]]; then
+            log_warning "Port conflicts detected"
+
+            # Extract conflicting ports and handle them
+            local ports
+            ports=$(echo "$conflicts" | jq -r '.[].port' 2>/dev/null || true)
+
+            for port in $ports; do
+                [[ -z "$port" ]] && continue
+
+                # Skip if conflict is from our own containers (being stopped)
+                local info
+                info=$(get_port_info "$port" 2>/dev/null || echo '{}')
+                local container
+                container=$(echo "$info" | jq -r '.container // empty' 2>/dev/null || true)
+
+                if [[ "$container" =~ ^doom- ]]; then
+                    log_info "Port $port will be freed by stopping existing doom container"
+                    continue
+                fi
+
+                local process_name
+                process_name=$(echo "$info" | jq -r '.process // "unknown"' 2>/dev/null || echo "unknown")
+                log_warning "Port $port is in use by: $process_name"
+
+                if [[ "$FORCE" == "true" ]]; then
+                    # In force mode, try to stop if it's a container
+                    if [[ -n "$container" ]]; then
+                        log_info "Force mode: stopping conflicting container $container"
+                        docker stop "$container" 2>/dev/null || true
+                    else
+                        log_warning "Cannot automatically stop process using port $port"
+                    fi
+                elif [[ "$UNATTENDED" != "true" ]]; then
+                    local alt_port
+                    alt_port=$(find_available_port $((port + 1)))
+                    echo ""
+                    echo "Options:"
+                    echo "  1) Continue anyway (may fail if port is still in use)"
+                    echo "  2) Abort installation"
+                    echo ""
+                    echo "  Note: Alternative port $alt_port is available"
+                    echo ""
+
+                    local choice
+                    read -rp "Choice [1/2] (default: 1): " choice < /dev/tty
+                    choice="${choice:-1}"
+
+                    if [[ "$choice" == "2" ]]; then
+                        log_info "Installation aborted by user"
+                        return 1
+                    fi
+                fi
+            done
+        fi
     else
-        local host_ip
-        host_ip=$(hostname -I | awk '{print $1}')
-        log_info "Zugriff via lokales Netzwerk:"
-        echo "  code-server: https://${host_ip}:8443"
+        # Fallback port check without service manager
+        log_step "Checking port availability..."
+        for port in 8443 7681; do
+            if command -v nc &>/dev/null && nc -z localhost "$port" 2>/dev/null; then
+                log_warning "Port $port appears to be in use"
+                if [[ "$FORCE" == "true" ]]; then
+                    # Try to stop doom containers that might be using it
+                    docker stop doom-code-server doom-claude 2>/dev/null || true
+                fi
+            elif command -v ss &>/dev/null && ss -tln 2>/dev/null | grep -q ":${port} "; then
+                log_warning "Port $port appears to be in use"
+            fi
+        done
+    fi
+
+    # Pull images with filtered output
+    log_step "Pulling container images..."
+    if [[ "$SERVICE_MANAGER_LOADED" == "true" ]] && [[ "$VERBOSE" != "true" ]]; then
+        docker compose -f "$COMPOSE_FILE" pull 2>&1 | filter_docker_output
+    else
+        docker compose -f "$COMPOSE_FILE" pull
+    fi
+
+    # Build and start with filtered output
+    log_step "Building and starting containers..."
+    if [[ "$SERVICE_MANAGER_LOADED" == "true" ]] && [[ "$VERBOSE" != "true" ]]; then
+        docker compose -f "$COMPOSE_FILE" build 2>&1 | filter_docker_output
+        docker compose -f "$COMPOSE_FILE" up -d 2>&1 | filter_docker_output
+    else
+        docker compose -f "$COMPOSE_FILE" build
+        docker compose -f "$COMPOSE_FILE" up -d
+    fi
+
+    # Check if services actually started
+    local failed_containers
+    failed_containers=$(docker ps -a --filter "name=doom-" --filter "status=created" --format '{{.Names}}' 2>/dev/null || true)
+
+    if [[ -n "$failed_containers" ]]; then
+        log_error "Some containers failed to start:"
+        echo "$failed_containers" | while read -r container; do
+            log_error "  ${container}: $(docker inspect ${container} --format '{{.State.Error}}' 2>/dev/null)"
+        done
+        log_warning "Cleaning up failed containers..."
+        echo "$failed_containers" | xargs docker rm 2>/dev/null || true
+        return 1
+    fi
+
+    # Wait for health and show access info
+    if [[ "$SERVICE_MANAGER_LOADED" == "true" ]]; then
+        wait_for_services 120 || log_warning "Some services are not yet healthy"
+        show_access_info "$COMPOSE_FILE"
+    else
+        log_success "Services started"
+        # Fallback access info
+        echo ""
+        if [[ "$NATIVE_TAILSCALE" == "true" ]]; then
+            local ts_ip
+            ts_ip=$(tailscale ip -4 2>/dev/null || echo "<TAILSCALE-IP>")
+            log_info "Access via Host-Tailscale:"
+            echo "  code-server: https://${ts_ip}:8443"
+            echo "  Tip: 'tailscale ip' shows the Tailscale IP"
+        elif [[ "${USE_TAILSCALE:-true}" == "true" ]]; then
+            log_info "Access via Tailscale IP (after 'tailscale up'):"
+            echo "  code-server: https://<TAILSCALE-IP>:8443"
+        else
+            local host_ip
+            host_ip=$(hostname -I | awk '{print $1}')
+            log_info "Access via local network:"
+            echo "  code-server: https://${host_ip}:8443"
+        fi
     fi
 }
 
