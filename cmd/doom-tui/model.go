@@ -35,6 +35,7 @@ type DeploymentMode int
 const (
 	ModeDockerTailscale DeploymentMode = iota
 	ModeDockerLocal
+	ModeNativeTailscale
 	ModeTerminalOnly
 )
 
@@ -391,7 +392,7 @@ func (m Model) handleDeploymentKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor--
 		}
 	case "down", "j":
-		if m.cursor < 2 {
+		if m.cursor < 3 {
 			m.cursor++
 		}
 	case "enter", " ":
@@ -496,6 +497,11 @@ func (m *Model) updateComponentsForMode() {
 		m.components[0].Enabled = true
 		m.components[1].Selected = true // Tailscale
 		m.components[1].Enabled = true
+	case ModeNativeTailscale:
+		m.components[0].Selected = true  // Docker
+		m.components[0].Enabled = true
+		m.components[1].Selected = false // Tailscale (uses host Tailscale)
+		m.components[1].Enabled = false
 	case ModeDockerLocal:
 		m.components[0].Selected = true // Docker
 		m.components[0].Enabled = true
@@ -593,6 +599,9 @@ func (m Model) runInstallation() tea.Cmd {
 		}
 		if !m.components[1].Selected || m.deploymentMode == ModeDockerLocal {
 			args = append(args, "--skip-tailscale")
+		}
+		if m.deploymentMode == ModeNativeTailscale {
+			args = append(args, "--native-tailscale")
 		}
 		if !m.components[2].Selected {
 			args = append(args, "--skip-terminal")

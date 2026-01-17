@@ -14,6 +14,7 @@ type DeploymentMode int
 const (
 	ModeDockerTailscale DeploymentMode = iota
 	ModeDockerLocal
+	ModeNativeTailscale
 	ModeTerminalOnly
 )
 
@@ -24,6 +25,8 @@ func (m DeploymentMode) String() string {
 		return "tailscale"
 	case ModeDockerLocal:
 		return "local"
+	case ModeNativeTailscale:
+		return "native-tailscale"
 	case ModeTerminalOnly:
 		return "terminal-only"
 	default:
@@ -53,9 +56,11 @@ type DeploymentScreen struct {
 }
 
 // NewDeploymentScreen creates a new deployment screen
-func NewDeploymentScreen(hasTUN bool, isLXC bool) DeploymentScreen {
+func NewDeploymentScreen(hasTUN bool, isLXC bool, hostTailscaleRunning bool) DeploymentScreen {
 	recommended := ModeDockerTailscale
-	if !hasTUN && isLXC {
+	if hostTailscaleRunning {
+		recommended = ModeNativeTailscale
+	} else if !hasTUN && isLXC {
 		recommended = ModeDockerLocal
 	}
 
@@ -64,10 +69,19 @@ func NewDeploymentScreen(hasTUN bool, isLXC bool) DeploymentScreen {
 			Mode:        ModeDockerTailscale,
 			Icon:        "🌐",
 			Name:        "Docker + Tailscale",
-			Description: "Full deployment with secure VPN access from anywhere",
-			Hint:        "Recommended for remote access",
+			Description: "Full deployment with Tailscale container for VPN access",
+			Hint:        "Recommended for new Tailscale setups",
 			Recommended: recommended == ModeDockerTailscale,
 			Enabled:     hasTUN || !isLXC,
+		},
+		{
+			Mode:        ModeNativeTailscale,
+			Icon:        "🔗",
+			Name:        "Docker + Host Tailscale",
+			Description: "Use existing Tailscale on host, no TUN device needed",
+			Hint:        "Best when Tailscale is already running on host",
+			Recommended: recommended == ModeNativeTailscale,
+			Enabled:     hostTailscaleRunning,
 		},
 		{
 			Mode:        ModeDockerLocal,

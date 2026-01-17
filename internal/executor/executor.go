@@ -380,14 +380,16 @@ type HealthChecker struct {
 
 // HealthCheckResult contains health check results
 type HealthCheckResult struct {
-	Docker     bool
-	Containers map[string]bool
-	Tailscale  bool
-	TailscaleIP string
-	Terminal   bool
-	SSH        bool
-	Secrets    bool
-	Errors     []string
+	Docker          bool
+	Containers      map[string]bool
+	Tailscale       bool
+	TailscaleIP     string
+	HostTailscale   bool   // Host Tailscale status (for native-tailscale mode)
+	HostTailscaleIP string // Host Tailscale IP
+	Terminal        bool
+	SSH             bool
+	Secrets         bool
+	Errors          []string
 }
 
 // NewHealthChecker creates a new health checker
@@ -447,24 +449,36 @@ func (h *HealthChecker) basicChecks(result *HealthCheckResult) {
 		result.Terminal = true
 	}
 
-	// Tailscale check
+	// Host Tailscale check (for native-tailscale mode)
 	if _, err := exec.LookPath("tailscale"); err == nil {
 		if output, err := exec.Command("tailscale", "status").Output(); err == nil {
 			if !strings.Contains(string(output), "Tailscale is stopped") {
-				result.Tailscale = true
+				result.HostTailscale = true
 			}
 		}
 		if output, err := exec.Command("tailscale", "ip", "-4").Output(); err == nil {
-			result.TailscaleIP = strings.TrimSpace(string(output))
+			result.HostTailscaleIP = strings.TrimSpace(string(output))
 		}
 	}
 
-	// Container status
+	// Container status - check which containers exist
 	if result.Docker {
-		for _, container := range []string{"doom-tailscale", "doom-code-server", "doom-claude"} {
+		// Check for Tailscale container (only in standard tailscale mode)
+		if err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", "doom-tailscale").Run(); err == nil {
+			result.Containers["doom-tailscale"] = true
+			result.Tailscale = true
+		}
+		// Check for core containers (present in all Docker modes)
+		for _, container := range []string{"doom-code-server", "doom-claude"} {
 			if err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", container).Run(); err == nil {
 				result.Containers[container] = true
 			}
 		}
+	}
+
+	// In native-tailscale mode, Tailscale status comes from host
+	if result.HostTailscale && !result.Tailscale {
+		result.Tailscale = true
+		result.TailscaleIP = result.HostTailscaleIP
 	}
 }

@@ -208,10 +208,40 @@ Complete documentation is available in the [`docs/`](docs/) directory:
 
 - **[Quick Start Guide](docs/installation/quick-start.md)** - Get running in 5 minutes
 - **[Installation Guide](docs/installation/)** - Detailed setup procedures
+- **[Testing Framework](docs/testing/)** - Comprehensive 70-iteration testing strategy
 - **[Configuration Reference](docs/configuration/)** - All configuration options
 - **[Security Guide](docs/security/)** - Security features and best practices
 - **[Troubleshooting](docs/troubleshooting/)** - Common issues and solutions
 - **[Advanced Topics](docs/advanced/)** - Power user features and customizations
+
+## 🧪 Testing & Quality Assurance
+
+**Comprehensive 70-Iteration Testing Framework**
+
+We've implemented a rigorous testing strategy covering 5 deployment scenarios across 70 structured test iterations:
+
+### Quick Testing Commands
+```bash
+# Basic health check
+./scripts/health-check.sh
+
+# Run security tests
+./scripts/test-runner.sh --category=security
+
+# Full deployment validation
+./scripts/test-runner.sh --deployment=docker-tailscale
+```
+
+### Testing Coverage
+| Phase | Focus | Iterations | Status |
+|-------|-------|------------|---------|
+| **Foundation** | Core functionality, deployment | 1-20 | ✅ |
+| **Security** | Hardening, vulnerability assessment | 21-35 | 🔄 |
+| **CI/CD** | Automation, deployment pipelines | 36-50 | 📋 |
+| **Integration** | Cross-platform, edge cases | 51-60 | 📋 |
+| **UX/Docs** | User experience, documentation | 61-70 | 📋 |
+
+**Complete Documentation**: [`docs/testing/`](docs/testing/)
 
 ## 🔧 Configuration
 

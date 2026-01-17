@@ -2,7 +2,45 @@
 
 Architecture and configuration of the Doom Coding Docker stack.
 
-## Architecture
+## Deployment Modes
+
+Doom Coding supports multiple deployment modes to fit different environments:
+
+| Mode | Description | Use Case | TUN Device Required |
+|------|-------------|----------|---------------------|
+| **Standard** | Containerized Tailscale (default) | General use, full isolation | Yes |
+| **Native Tailscale** | Uses host Tailscale installation | LXC containers, performance | No |
+
+### Mode Selection
+
+- **Standard Mode** (this document): Best for most deployments with full container isolation
+- **[Native Tailscale Mode](native-tailscale.md)**: Perfect for LXC containers and when TUN device is not available
+
+### Quick Comparison
+
+| Feature | Standard Mode | Native Tailscale Mode |
+|---------|---------------|------------------------|
+| **Complexity** | Medium | Low |
+| **Performance** | Good | Better |
+| **Isolation** | High | Medium |
+| **LXC Support** | Requires TUN device | Full support |
+| **Setup Time** | Longer | Shorter |
+| **Maintenance** | Container updates needed | Uses host Tailscale |
+
+**Choose Standard Mode if:**
+- You want complete service isolation
+- TUN device is available
+- You prefer containerized networking
+
+**Choose Native Tailscale Mode if:**
+- Running in LXC containers
+- TUN device is not available
+- You want maximum performance
+- Tailscale is already running on host
+
+## Architecture (Standard Mode)
+
+This architecture shows the standard containerized Tailscale mode. For native Tailscale mode architecture, see [native-tailscale.md](native-tailscale.md).
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -41,7 +79,9 @@ Architecture and configuration of the Doom Coding Docker stack.
 
 ### Tailscale (Sidecar)
 
-The Tailscale container provides networking for all other services.
+The Tailscale container provides networking for all other services in standard mode.
+
+> **Note**: In [native-tailscale mode](native-tailscale.md), this container is not needed as the host's Tailscale installation is used instead.
 
 **Key Configuration**:
 ```yaml
@@ -104,6 +144,8 @@ claude:
 
 ## Volumes
 
+> **Note**: In [native-tailscale mode](native-tailscale.md), the `doom-tailscale-state` volume is not needed since the host manages Tailscale state.
+
 ### Named Volumes
 
 | Volume | Purpose | Backup Priority |
@@ -149,10 +191,12 @@ Access in container: `/run/secrets/anthropic_api_key`
 
 ## Commands
 
+> **Note**: For [native-tailscale mode](native-tailscale.md), use `docker-compose.native-tailscale.yml` instead of the default compose file.
+
 ### Starting Services
 
 ```bash
-# Start all services
+# Start all services (standard mode)
 docker compose up -d
 
 # Start specific service
@@ -160,6 +204,9 @@ docker compose up -d code-server
 
 # Rebuild and start
 docker compose up -d --build
+
+# For native-tailscale mode
+docker compose -f docker-compose.native-tailscale.yml up -d
 ```
 
 ### Viewing Logs
@@ -200,6 +247,26 @@ docker compose pull
 # Recreate containers
 docker compose up -d --force-recreate
 ```
+
+### Testing Your Deployment
+
+Validate your Docker deployment with our comprehensive testing suite:
+
+```bash
+# Basic health verification
+./scripts/health-check.sh
+
+# Test Docker-specific functionality
+./scripts/test-runner.sh --deployment=docker-tailscale --category=foundation
+
+# Security validation for containers
+./scripts/test-runner.sh --category=security --focus=containers
+
+# Full deployment validation
+./scripts/test-runner.sh --deployment=docker-tailscale --iterations=1-20
+```
+
+**Complete Testing Documentation**: [`../testing/`](../testing/)
 
 ## Customization
 
@@ -276,6 +343,17 @@ id -u && id -g
 ```
 
 ## Next Steps
+
+### Testing and Validation
+
+- **[Testing Framework](../testing/)** - Comprehensive 70-iteration testing strategy
+- **[Quality Assurance](../testing/test-plan-70.md)** - Detailed testing procedures
+
+### Alternative Deployment Modes
+
+- **[Native Tailscale Mode](native-tailscale.md)** - Use host Tailscale for better performance and LXC compatibility
+
+### Configuration and Management
 
 - [Container Customization](customization.md)
 - [Docker Security](security.md)

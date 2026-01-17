@@ -108,7 +108,8 @@ Access your services:
 
 ## ✅ Verify Installation
 
-Run the health check:
+### Basic Health Check
+Run the health check to verify core functionality:
 
 ```bash
 ./scripts/health-check.sh
@@ -128,6 +129,22 @@ Expected output:
 
 🎉 All systems operational!
 ```
+
+### Additional Testing
+For comprehensive validation, run our testing suite:
+
+```bash
+# Quick smoke test (5 minutes)
+./scripts/test-runner.sh --smoke-test
+
+# Security validation
+./scripts/test-runner.sh --category=security
+
+# Full deployment validation
+./scripts/test-runner.sh --deployment=docker-tailscale --iterations=1-10
+```
+
+**Testing Documentation**: See [`/docs/testing/`](../testing/) for complete 70-iteration testing framework.
 
 ## 🐛 Quick Troubleshooting
 
@@ -177,10 +194,11 @@ Expected output:
 
 Once everything is running:
 
-1. **[Configure your environment](../configuration/basic-setup.md)**
-2. **[Customize your terminal](../terminal/customization.md)**
-3. **[Set up backups](../advanced/backup-recovery.md)**
-4. **[Learn advanced features](../advanced/)**
+1. **[Run comprehensive testing](../testing/)** - Validate your installation with our 70-iteration framework
+2. **[Configure your environment](../configuration/basic-setup.md)**
+3. **[Customize your terminal](../terminal/customization.md)**
+4. **[Set up backups](../advanced/backup-recovery.md)**
+5. **[Learn advanced features](../advanced/)**
 
 ## 🔧 Installation Options
 

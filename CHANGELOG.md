@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Native-Tailscale Mode**: New deployment option using existing host Tailscale installation (no additional containers)
+- **docker-compose.native-tailscale.yml**: New compose file that exposes container ports directly to host network
+- **Host Network Integration**: Leverages existing Tailscale installation on the host without additional VPN containers
+- **Direct Port Exposure**: Container ports are exposed directly to the host's Tailscale network interface
+- **Zero TUN Device Requirements**: Works without TUN device by using host Tailscale networking stack
+- **Enhanced Host Detection**: Improved installer logic to detect running Tailscale on host and recommend Native-Tailscale mode
 - Complete documentation coverage for all referenced files
 - Advanced topics documentation with performance and monitoring guides
 - Contributing guidelines with code style standards
@@ -15,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Manual installation documentation for step-by-step setup
 
 ### Changed
+- **Installation Experience**: Installer now offers three deployment modes with intelligent environment detection
+- **Host Tailscale Detection**: Installation script automatically detects running Tailscale on host and recommends Native-Tailscale Mode
+- **Interactive Input Handling**: Fixed curl|bash compatibility by using /dev/tty for user prompts in LXC environments
 - Enhanced README with comprehensive deployment options and CLI reference
 - Updated SSH hardening configuration to remove deprecated options
 - Improved installer help text with complete CLI option documentation
@@ -97,8 +106,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | Mode | Access Method | Requirements | Use Case |
 |------|---------------|--------------|----------|
 | Tailscale | VPN mesh (100.x.x.x) | TUN device | Remote access, multi-device |
+| **Native-Tailscale** | **VPN mesh (100.x.x.x)** | **Host Tailscale** | **Existing Tailscale hosts, better performance** |
 | Local Network | Direct IP (192.168.x.x) | None | LXC, home lab, local development |
 | Terminal Environment | HTTPS (443) + ttyd (7681) | systemd | Lightweight, mobile-optimized |
+
+#### Native-Tailscale Mode Features
+- **No TUN Device Required**: Uses existing host Tailscale installation instead of container networking
+- **Host Integration**: Leverages running Tailscale daemon on host system
+- **Full VPN Access**: Complete Tailscale mesh networking on 100.x.x.x subnet via host
+- **Direct Port Exposure**: Container ports exposed directly to host's Tailscale network interface
+- **Zero Configuration**: Automatic detection when host Tailscale is running
+- **Better Performance**: No additional containers or networking overhead, uses host Tailscale directly
 
 ### Security Audit Results
 
@@ -136,6 +154,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | Docker Stack | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Terminal Environment | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Tailscale | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Native-Tailscale** | **✅** | **✅** | **✅** | **✅** | **✅** |
 | LXC Mode | ✅ | ✅ | ✅ | ✅ | N/A |
 | SSH Hardening | ✅ | ✅ | ✅ | ✅ | ✅ |
 
@@ -164,8 +183,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 docker compose up -d
 
 # New: Choose deployment method
-docker compose up -d                          # Tailscale (default)
-docker compose -f docker-compose.lxc.yml up -d # LXC/Local network
+docker compose up -d                                  # Tailscale (default)
+docker compose -f docker-compose.native-tailscale.yml up -d # Native-Tailscale (Host)
+docker compose -f docker-compose.lxc.yml up -d           # LXC/Local network
 ```
 
 ### Breaking Changes

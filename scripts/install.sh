@@ -48,6 +48,7 @@ VERBOSE=false
 FORCE=false
 ENV_FILE=""
 USE_TAILSCALE=true
+NATIVE_TAILSCALE=false
 
 # Unattended installation values
 TAILSCALE_KEY=""
@@ -202,6 +203,7 @@ OPTIONS:
     --skip-docker       Skip Docker installation
     --skip-tailscale    Skip Tailscale, use local network (for LXC)
     --local-network     Alias for --skip-tailscale
+    --native-tailscale  Use existing Tailscale on host (no container)
     --skip-terminal     Skip terminal tools setup
     --skip-hardening    Skip SSH hardening
     --skip-secrets      Skip SOPS/age setup
@@ -220,6 +222,7 @@ EXAMPLES:
     $0                              Interactive installation
     $0 --unattended                 Fully automated installation
     $0 --skip-tailscale             LXC without TUN device
+    $0 --native-tailscale           Use host's existing Tailscale
     $0 --unattended \\
       --tailscale-key="tskey-auth-xxx" \\
       --code-password="secure-password" \\
@@ -752,6 +755,65 @@ install_tailscale() {
     log_success "Tailscale installed"
 }
 
+setup_native_tailscale() {
+    log_step "Checking host Tailscale for native-tailscale mode..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY RUN] Would verify host Tailscale configuration"
+        return 0
+    fi
+
+    # Check if Tailscale is installed
+    if ! command -v tailscale &>/dev/null; then
+        log_error "Tailscale is not installed on the host"
+        log_error "Native-tailscale mode requires Tailscale to be installed on the host"
+        log_info "Install Tailscale with: curl -fsSL https://tailscale.com/install.sh | sh"
+        return 1
+    fi
+
+    # Check if Tailscale is running
+    if ! tailscale status &>/dev/null; then
+        log_warning "Tailscale is installed but not running"
+        log_info "Start Tailscale with: sudo tailscale up"
+
+        if [[ "$UNATTENDED" != "true" ]]; then
+            if confirm "Would you like to start Tailscale now?" "y"; then
+                sudo tailscale up
+            fi
+        fi
+    fi
+
+    # Get Tailscale IP
+    local ts_ip
+    ts_ip=$(tailscale ip -4 2>/dev/null || echo "")
+
+    if [[ -n "$ts_ip" ]]; then
+        log_success "Host Tailscale is running"
+        log_info "Tailscale IP: $ts_ip"
+        echo ""
+        log_info "Services will be accessible via:"
+        echo "  code-server: https://${ts_ip}:8443"
+        echo "  Claude ttyd: http://${ts_ip}:7681"
+        echo ""
+
+        # Optional: Ask about tailscale serve
+        if [[ "$UNATTENDED" != "true" ]]; then
+            echo -e "${BLUE}Optional: Tailscale Serve${NC}"
+            echo "You can use 'tailscale serve' to expose services with HTTPS"
+            echo "and automatic certificates. This is optional."
+            echo ""
+            echo "Example:"
+            echo "  tailscale serve --bg 8443"
+            echo ""
+        fi
+    else
+        log_warning "Could not determine Tailscale IP"
+        log_info "Make sure Tailscale is connected with: tailscale up"
+    fi
+
+    log_success "Native Tailscale mode configured"
+}
+
 setup_environment() {
     log_step "Setting up environment..."
 
@@ -838,7 +900,13 @@ start_services() {
 
     # Show access info
     echo ""
-    if [[ "${USE_TAILSCALE:-true}" == "true" ]]; then
+    if [[ "$NATIVE_TAILSCALE" == "true" ]]; then
+        local ts_ip
+        ts_ip=$(tailscale ip -4 2>/dev/null || echo "<TAILSCALE-IP>")
+        log_info "Zugriff via Host-Tailscale:"
+        echo "  code-server: https://${ts_ip}:8443"
+        echo "  Tipp: 'tailscale ip' zeigt die Tailscale IP"
+    elif [[ "${USE_TAILSCALE:-true}" == "true" ]]; then
         log_info "Zugriff via Tailscale IP (nach 'tailscale up'):"
         echo "  code-server: https://<TAILSCALE-IP>:8443"
     else
@@ -867,6 +935,13 @@ parse_arguments() {
                 SKIP_TAILSCALE=true
                 USE_TAILSCALE=false
                 COMPOSE_FILE="docker-compose.lxc.yml"
+                shift
+                ;;
+            --native-tailscale)
+                NATIVE_TAILSCALE=true
+                USE_TAILSCALE=false
+                SKIP_TAILSCALE=true
+                COMPOSE_FILE="docker-compose.native-tailscale.yml"
                 shift
                 ;;
             --skip-terminal)
@@ -967,9 +1042,13 @@ main() {
     install_base_packages
     install_docker
 
-    # Tailscale setup (interactive choice)
-    setup_tailscale_choice
-    install_tailscale
+    # Tailscale setup (interactive choice or native mode)
+    if [[ "$NATIVE_TAILSCALE" == "true" ]]; then
+        setup_native_tailscale
+    else
+        setup_tailscale_choice
+        install_tailscale
+    fi
 
     # Terminal tools
     if [[ "$SKIP_TERMINAL" != "true" ]]; then

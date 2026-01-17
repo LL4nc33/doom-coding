@@ -12,7 +12,7 @@ import (
 // Config represents the full installation configuration
 type Config struct {
 	// Deployment settings
-	DeploymentMode string `json:"deployment_mode"` // "tailscale", "local", "terminal-only"
+	DeploymentMode string `json:"deployment_mode"` // "tailscale", "local", "native-tailscale", "terminal-only"
 
 	// Component selection
 	Components ComponentSelection `json:"components"`
@@ -201,6 +201,9 @@ func (c *Config) GenerateBashFlags() []string {
 	if !c.Components.Tailscale || c.DeploymentMode == "local" {
 		flags = append(flags, "--skip-tailscale")
 	}
+	if c.DeploymentMode == "native-tailscale" {
+		flags = append(flags, "--native-tailscale")
+	}
 	if !c.Components.TerminalTools {
 		flags = append(flags, "--skip-terminal")
 	}
@@ -229,6 +232,8 @@ func (c *Config) GetComposeFile() string {
 	switch c.DeploymentMode {
 	case "local":
 		return "docker-compose.lxc.yml"
+	case "native-tailscale":
+		return "docker-compose.native-tailscale.yml"
 	case "terminal-only":
 		return ""
 	default:
@@ -250,12 +255,13 @@ func (c *Config) Validate() []string {
 		}
 	}
 
-	// Check Tailscale key for VPN mode
+	// Check Tailscale key for VPN mode (not required for native-tailscale as it uses host Tailscale)
 	if c.DeploymentMode == "tailscale" && c.Components.Tailscale {
 		if c.Credentials.TailscaleKey == "" {
 			errors = append(errors, "Tailscale auth key is required for VPN mode")
 		}
 	}
+	// native-tailscale mode doesn't need a Tailscale key - it uses the host's Tailscale installation
 
 	// Validate workspace path
 	if c.Environment.WorkspacePath == "" {

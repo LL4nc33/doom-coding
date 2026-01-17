@@ -159,14 +159,20 @@ func (m Model) viewDeploymentMode() string {
 		{
 			icon:        "🌐",
 			name:        "Docker + Tailscale",
-			description: "Full deployment with VPN access",
-			note:        "Recommended for remote access",
+			description: "Full deployment with Tailscale container",
+			note:        "Recommended for new Tailscale setups",
 		},
 		{
 			icon:        "🏠",
 			name:        "Docker + Local Network",
 			description: "Containers accessible on local network only",
 			note:        "Best for LXC without TUN device",
+		},
+		{
+			icon:        "🔗",
+			name:        "Docker + Host Tailscale",
+			description: "Use existing Tailscale on host",
+			note:        "Best when Tailscale is already running",
 		},
 		{
 			icon:        "⚡",
@@ -311,6 +317,8 @@ func (m Model) viewPreview() string {
 	switch m.deploymentMode {
 	case ModeDockerTailscale:
 		deployMode = "Docker + Tailscale (VPN access)"
+	case ModeNativeTailscale:
+		deployMode = "Docker + Host Tailscale"
 	case ModeDockerLocal:
 		deployMode = "Docker + Local Network"
 	case ModeTerminalOnly:
@@ -444,6 +452,9 @@ func (m Model) viewResults() string {
 		if m.deploymentMode == ModeDockerTailscale {
 			content.WriteString("    • code-server: https://<tailscale-ip>:8443\n")
 			content.WriteString("    • Run 'tailscale status' to get your IP\n")
+		} else if m.deploymentMode == ModeNativeTailscale {
+			content.WriteString("    • code-server: https://<host-tailscale-ip>:8443\n")
+			content.WriteString("    • Run 'tailscale ip' to get your host's Tailscale IP\n")
 		} else if m.deploymentMode == ModeDockerLocal {
 			content.WriteString("    • code-server: https://localhost:8443\n")
 			content.WriteString("    • Or use your machine's local IP\n")
@@ -477,6 +488,9 @@ func (m Model) getBashFlags() string {
 	}
 	if !m.components[1].Selected || m.deploymentMode == ModeDockerLocal {
 		flags = append(flags, "--skip-tailscale")
+	}
+	if m.deploymentMode == ModeNativeTailscale {
+		flags = append(flags, "--native-tailscale")
 	}
 	if !m.components[2].Selected {
 		flags = append(flags, "--skip-terminal")

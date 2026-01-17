@@ -284,14 +284,16 @@ func parseHexIP(hex string) string {
 
 // GetRecommendedMode returns the recommended deployment mode based on system detection
 func (s *SystemInfo) GetRecommendedMode() string {
+	// If host Tailscale is already installed and running, recommend native-tailscale
+	// This uses the existing host Tailscale installation instead of a container
+	if s.TailscaleInstalled && s.TailscaleRunning {
+		return "native-tailscale" // Use host Tailscale - no container needed
+	}
 	if !s.HasTUN && s.IsLXC {
 		return "local" // LXC without TUN can't use Tailscale in kernel mode
 	}
-	if s.TailscaleInstalled && s.TailscaleRunning {
-		return "tailscale" // Already have Tailscale
-	}
 	if s.HasTUN {
-		return "tailscale" // TUN available, Tailscale is recommended
+		return "tailscale" // TUN available, Tailscale container is recommended
 	}
 	return "local" // Default to local for safety
 }
